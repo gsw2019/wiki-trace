@@ -24,7 +24,7 @@ typedef struct {
  * 
  * @param ptr:   delivered data
  * @param size:  always 1 (fwrite relic, unused here)
- * @param nmemb: size of delivere data
+ * @param nmemb: size of delivered data
  * @param res:   the pointer provided in the WRITEDATA setopt
  */
 size_t write_callback(void *ptr, size_t size, size_t nmemb, Response *res) {
@@ -38,29 +38,11 @@ size_t write_callback(void *ptr, size_t size, size_t nmemb, Response *res) {
 }
 
 int main(int argc, char* argv[]) {
-  init_ncurses();
-  int menu_choice = get_menu_choice();
-  
-  // determine course of action based on menu choice
-  switch(menu_choice) {
-    case START_TRACE:
-      // TODO
-    case SETTINGS:
-      // TODO
-    case ABOUT:
-      // TODO
-    case EXIT:
-      clrtoeol();
-      refresh();
-      endwin();
-      return 0;
-  } 
+  init_wiki_trace_view(); 
 
-  clrtoeol();
+  clear();
   refresh();
   endwin();
-
-  printf("%d\n", menu_choice);
 
   /* Response res = { .data = malloc(1), .size = 0 }; */
   /**/
