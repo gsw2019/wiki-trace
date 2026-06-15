@@ -38,11 +38,15 @@ size_t write_callback(void *ptr, size_t size, size_t nmemb, Response *res) {
 }
 
 int main(int argc, char* argv[]) {
-  init_wiki_trace_view(); 
+  init_wiki_trace_view();
+  TracePages pages = get_trace_pages(); 
 
   clear();
   refresh();
   endwin();
+
+  printf("starting page: %s\n", pages.start_page);
+  printf("destination page: %s\n", pages.dest_page);
 
   /* Response res = { .data = malloc(1), .size = 0 }; */
   /**/
