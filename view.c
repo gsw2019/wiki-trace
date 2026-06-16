@@ -213,37 +213,39 @@ static void show_trace() {
   refresh();
 
   // build trace window
+  WindowProps* main_window = &trace_windows.main_window;
   int trace_window_start_y = (LINES - TRACE_WIN_HEIGHT) / 2;
   int trace_window_start_x = (COLS - TRACE_WIN_WIDTH) / 2;
-  trace_windows.main_window = newwin(TRACE_WIN_HEIGHT, TRACE_WIN_WIDTH, trace_window_start_y, trace_window_start_x);
-  box(trace_windows.main_window, 0, 0);
+  main_window->window = newwin(TRACE_WIN_HEIGHT, TRACE_WIN_WIDTH, trace_window_start_y, trace_window_start_x);
+  box(trace_windows.main_window.window, 0, 0);
 
   // window title
-  char* trace_window_title = "RUN A TRACE";
-  wattron(trace_windows.main_window, A_BOLD);
-  mvwprintw(trace_windows.main_window, 0, TRACE_WIN_WIDTH/2 - strlen(trace_window_title)/2, trace_window_title);
-  wattroff(trace_windows.main_window, A_BOLD);
+  main_window->title = "RUN A TRACE";
+  wattron(main_window->window, A_BOLD);
+  mvwprintw(main_window->window, 0, TRACE_WIN_WIDTH/2 - strlen(main_window->title)/2, main_window->title); 
+  wattroff(main_window->window, A_BOLD);
 
   char* header_message1 = "Walk one of the possible paths that exists between the start Wikipedia page and";
   char* header_message2 = "the destination Wikipedia page. Pages that are extremely different will take";
   char* header_message3 = "longer to search for a path, if one exists.";
-  mvwprintw(trace_windows.main_window, 1, TRACE_WIN_WIDTH/2 - strlen(header_message1)/2, header_message1);
-  mvwprintw(trace_windows.main_window, 2, TRACE_WIN_WIDTH/2 - strlen(header_message2)/2, header_message2);
-  mvwprintw(trace_windows.main_window, 3, TRACE_WIN_WIDTH/2 - strlen(header_message3)/2, header_message3);
+  mvwprintw(main_window->window, 1, TRACE_WIN_WIDTH/2 - strlen(header_message1)/2, header_message1);
+  mvwprintw(main_window->window, 2, TRACE_WIN_WIDTH/2 - strlen(header_message2)/2, header_message2);
+  mvwprintw(main_window->window, 3, TRACE_WIN_WIDTH/2 - strlen(header_message3)/2, header_message3);
 
   // arrow pointing from start page to destination page
-  char* arrow = "======>";
-  wattron(trace_windows.main_window, A_BOLD);
-  mvwprintw(trace_windows.main_window, 6, TRACE_WIN_WIDTH/2 - strlen(arrow)/2, arrow);
-  wattroff(trace_windows.main_window, A_BOLD);
+  wattron(main_window->window, A_BOLD);
+  mvwprintw(main_window->window, 6, TRACE_WIN_WIDTH/2 - strlen("======>")/2, "======>");
+  wattroff(main_window->window, A_BOLD);
 
   // inner window for start page (spage)
+  WindowProps* spage_window = &trace_windows.spage_window;
   int spage_window_y = trace_window_start_y + 5;
   int spage_window_x = trace_window_start_x + 2;
-  trace_windows.spage_window = newwin(TEXT_WIN_HEIGHT, TEXT_WIN_WIDTH, spage_window_y, spage_window_x);
-  box(trace_windows.spage_window, 0, 0);
-  char* spage_window_title = "start page";
-  mvwprintw(trace_windows.spage_window, 0, 2, spage_window_title);
+  spage_window->window = newwin(TEXT_WIN_HEIGHT, TEXT_WIN_WIDTH, spage_window_y, spage_window_x);
+
+  spage_window->title = "start_page";
+  box(spage_window->window, 0, 0);
+  mvwprintw(spage_window->window, 0, 2, spage_window->title);
 
   // text field for spage window
   int spage_text_field_y = spage_window_y + 1;
@@ -258,12 +260,14 @@ static void show_trace() {
   int spage_view_height = spage_view_bot - spage_view_top + 1;
 
   // inner window for destination page (dpage)
+  WindowProps* dpage_window = &trace_windows.dpage_window;
   int dpage_window_y = trace_window_start_y + 5;
   int dpage_window_x = trace_window_start_x + TRACE_WIN_WIDTH - TEXT_WIN_WIDTH - 2;
-  trace_windows.dpage_window = newwin(TEXT_WIN_HEIGHT, TEXT_WIN_WIDTH, dpage_window_y, dpage_window_x);
-  box(trace_windows.dpage_window, 0, 0);
-  char* dpage_window_title = "destination page";
-  mvwprintw(trace_windows.dpage_window, 0, 2, dpage_window_title);
+  dpage_window->window = newwin(TEXT_WIN_HEIGHT, TEXT_WIN_WIDTH, dpage_window_y, dpage_window_x);
+
+  dpage_window->title = "destination page";
+  box(dpage_window->window, 0, 0);
+  mvwprintw(dpage_window->window, 0, 2, dpage_window->title);
 
   // text field for dpage window
   trace_windows.dpage_text_field = newpad(TEXT_FIELD_HEIGHT, TEXT_FIELD_WIDTH);
@@ -274,13 +278,18 @@ static void show_trace() {
   int dpage_view_bot  = dpage_window_y + 1;
   int dpage_view_right = dpage_window_x + TEXT_WIN_WIDTH - 2;
 
-  // inner window for trace history 
+  // color to draw active window borders
+  init_pair(1, COLOR_CYAN, COLOR_BLACK);
+
+  // inner window for trace history
+  WindowProps* hist_window = &trace_windows.hist_window;
   int hist_start_y = trace_window_start_y + 9;
   int hist_start_x = trace_window_start_x + (TRACE_WIN_WIDTH - HIST_WIN_WIDTH) / 2;
-  trace_windows.hist_window = newwin(HIST_WIN_HEIGHT, HIST_WIN_WIDTH, hist_start_y, hist_start_x);
-  box(trace_windows.hist_window, 0, 0);
-  char* hist_window_title = "trace history";
-  mvwprintw(trace_windows.hist_window, 0, 2, hist_window_title);
+  hist_window->window = newwin(HIST_WIN_HEIGHT, HIST_WIN_WIDTH, hist_start_y, hist_start_x);
+
+  hist_window->title = "trace history";
+  box(hist_window->window, 0, 0);
+  mvwprintw(hist_window->window, 0, 2, hist_window->title);
 
   // text field for trace history
   trace_data.history.text_field = newpad(HIST_TEXT_FIELD_HEIGHT, HIST_TEXT_FIELD_WIDTH);
@@ -310,34 +319,36 @@ static void show_trace() {
   int row1 = TRACE_WIN_HEIGHT - 5;
   int row2 = TRACE_WIN_HEIGHT - 3;
 
-  mvwprintw(trace_windows.main_window, row1, col_width*0 + col_width/2 - strlen(start)/2, start);
-  mvwprintw(trace_windows.main_window, row1, col_width*1 + col_width/2 - strlen(pause)/2, pause);
-  mvwprintw(trace_windows.main_window, row1, col_width*2 + col_width/2 - strlen(resume)/2, resume);
-  mvwprintw(trace_windows.main_window, row1, col_width*3 + col_width/2 - strlen(stop)/2, stop);
+  mvwprintw(main_window->window, row1, col_width*0 + col_width/2 - strlen(start)/2, start);
+  mvwprintw(main_window->window, row1, col_width*1 + col_width/2 - strlen(pause)/2, pause);
+  mvwprintw(main_window->window, row1, col_width*2 + col_width/2 - strlen(resume)/2, resume);
+  mvwprintw(main_window->window, row1, col_width*3 + col_width/2 - strlen(stop)/2, stop);
 
-  mvwprintw(trace_windows.main_window, row2, col_width*0 + col_width/2 - strlen(change_spage)/2, change_spage);
-  mvwprintw(trace_windows.main_window, row2, col_width*1 + col_width/2 - strlen(change_dpage)/2, change_dpage);
-  mvwprintw(trace_windows.main_window, row2, col_width*2 + col_width/2 - strlen(back)/2, back);
-  mvwprintw(trace_windows.main_window, row2, col_width*3 + col_width/2 - strlen(quit)/2, quit);
+  mvwprintw(main_window->window, row2, col_width*0 + col_width/2 - strlen(change_spage)/2, change_spage);
+  mvwprintw(main_window->window, row2, col_width*1 + col_width/2 - strlen(change_dpage)/2, change_dpage);
+  mvwprintw(main_window->window, row2, col_width*2 + col_width/2 - strlen(back)/2, back);
+  mvwprintw(main_window->window, row2, col_width*3 + col_width/2 - strlen(quit)/2, quit);
 
   // render the trace screen
-  wrefresh(trace_windows.main_window);
-  wrefresh(trace_windows.spage_window);
-  wrefresh(trace_windows.dpage_window);
-  wrefresh(trace_windows.hist_window);
+  wrefresh(main_window->window);
+  wrefresh(spage_window->window);
+  wrefresh(dpage_window->window);
+  wrefresh(hist_window->window);
   prefresh(trace_windows.spage_text_field, spage_min_row, spage_min_col, spage_view_top, spage_view_left, spage_view_bot, spage_view_right);
   prefresh(trace_windows.dpage_text_field, dpage_min_row, dpage_min_col, dpage_view_top, dpage_view_left, dpage_view_bot, dpage_view_right);
   prefresh(history.text_field, history.min_row, history.min_col, history.view_top, history.view_left, history.view_bot, history.view_right);
 
   // handle actions via key presses
-  wtimeout(trace_windows.main_window, 100);   // errors out wgetch after 100 ms, falls to defualt
+  keypad(main_window->window, TRUE);
+  wtimeout(main_window->window, 100);   // errors out wgetch after 100 ms, falls to defualt
   while (1) {
-    int ch = wgetch(trace_windows.main_window);
+    int ch = wgetch(main_window->window);
     int index;
 
     switch(ch) {
       case 's':
       case 'S':
+        focus_window(trace_windows.hist_window, true);
         init_trace_verification();
         break;
       case 'p':
@@ -357,6 +368,7 @@ static void show_trace() {
         pthread_mutex_lock(&trace_data.lock);
         index = strlen(trace_data.start_page);
         pthread_mutex_unlock(&trace_data.lock);
+        focus_window(trace_windows.hist_window, false);
         read_user_input(1, trace_windows.spage_text_field, spage_min_row, spage_min_col, spage_view_top, spage_view_left, spage_view_bot, spage_view_right, index);
         break;
       case 't':
@@ -364,27 +376,28 @@ static void show_trace() {
         pthread_mutex_lock(&trace_data.lock);
         index = strlen(trace_data.dest_page);
         pthread_mutex_unlock(&trace_data.lock);
+        focus_window(trace_windows.hist_window, false);
         read_user_input(2, trace_windows.dpage_text_field, dpage_min_row, dpage_min_col, dpage_view_top, dpage_view_left, dpage_view_bot, dpage_view_right, index);
         break;
       case 'b':
       case 'B':
-        delwin(trace_windows.main_window);
-        delwin(trace_windows.spage_window);
+        delwin(main_window->window);
+        delwin(spage_window->window);
         delwin(trace_windows.spage_text_field);
-        delwin(trace_windows.dpage_window);
+        delwin(dpage_window->window);
         delwin(trace_windows.dpage_text_field);
-        delwin(trace_windows.hist_window);
+        delwin(hist_window->window);
         delwin(history.text_field);
         init_view();
         break;
       case 'q':
       case 'Q':
-        delwin(trace_windows.main_window);
-        delwin(trace_windows.spage_window);
+        delwin(main_window->window);
+        delwin(spage_window->window);
         delwin(trace_windows.spage_text_field);
-        delwin(trace_windows.dpage_window);
+        delwin(dpage_window->window);
         delwin(trace_windows.dpage_text_field);
-        delwin(trace_windows.hist_window);
+        delwin(hist_window->window);
         delwin(history.text_field);
         endwin();
         return;
@@ -463,7 +476,7 @@ void update_trace_verification() {
 /*
  * Read chars entered into the start page text field or the destination page text field.
  * 
- * @param page: a flag to know which text field is being written to
+ * @param page: a flag to know which text field is being written to (1 = spage, 2 = dpage)
  * @param text_field: the window to display and read text from
  * @param min_row: the starting row displayed in the window
  * @param min_col: the staring column displyed in the window
@@ -476,10 +489,17 @@ void update_trace_verification() {
 static void read_user_input(int page, WINDOW* text_field, int min_row, int min_col, int view_top, int view_left, int view_bot, int view_right, int index) {
   curs_set(1);
   wmove(text_field, 0, index);
+
+  // change border color to show avtive window
+  if (page == 1) { focus_window(trace_windows.spage_window, true); }
+  else { focus_window(trace_windows.dpage_window, true);
+
+  }
+
   prefresh(text_field, 0, 0, view_top, view_left, view_bot, view_right);
   keypad(text_field, TRUE);
 
-  // prefill if editing populated text field
+  // prefill memory if editing populated text field
   char text[256] = {0};
   pthread_mutex_lock(&trace_data.lock);
   if (page == 1) { strcpy(text, trace_data.start_page); }
@@ -488,6 +508,7 @@ static void read_user_input(int page, WINDOW* text_field, int min_row, int min_c
 
   while(1) {
     int ch = wgetch(text_field);
+
     // ASCCII chars
     if (ch >= 32 && ch <= 126 && index <= 255) {
       waddch(text_field, ch);   // add to text field
@@ -510,12 +531,24 @@ static void read_user_input(int page, WINDOW* text_field, int min_row, int min_c
     }
     // user pressed enter
     else if (ch == 10) {
+      // change window border color
+      if (page == 1) {
+        focus_window(trace_windows.spage_window, false);
+        update_text_field_view(text_field, min_row, min_col, view_top, view_left, view_bot, view_right, index);
+        curs_set(0);
+      }
+      else {
+        focus_window(trace_windows.dpage_window, false);
+        update_text_field_view(text_field, min_row, min_col, view_top, view_left, view_bot, view_right, index);
+        curs_set(0);
+      }
+
       text[index] = '\0';
       pthread_mutex_lock(&trace_data.lock);
       if (page == 1) { strcpy(trace_data.start_page, text); }
       else { strcpy(trace_data.dest_page, text); }
       pthread_mutex_unlock(&trace_data.lock);
-      curs_set(0);
+
       return;
     }
   }
@@ -550,6 +583,30 @@ static void update_text_field_view(WINDOW* text_field, int min_row, int min_col,
 
 
 /*
+ * bring a window into focus by changing its border color
+ */
+void focus_window(WindowProps window_props, bool focus) {
+  if (focus) {
+    wattron(window_props.window, COLOR_PAIR(1));
+    box(window_props.window, 0, 0);
+    mvwprintw(window_props.window, 0, 2, window_props.title);
+    wattroff(window_props.window, COLOR_PAIR(1));
+    wrefresh(window_props.window);
+  }
+  else {
+    box(window_props.window, 0, 0);
+    mvwprintw(window_props.window, 0, 2, window_props.title);
+    wrefresh(window_props.window);
+  }
+}
+
+
+/*
+ *
+ */
+
+
+/*
  * Used to update the trace history view.
  *
  * @param history: a struct containing all necesary fields to update its display text
@@ -576,27 +633,28 @@ static void show_about() {
   refresh();
 
   // draw about window
+  WindowProps* about_window = &about_windows.main_window;
   int about_start_y = (LINES - ABOUT_WIN_HEIGHT) / 2;
   int about_start_x = (COLS - ABOUT_WIN_WIDTH) / 2;
-  about_windows.main_window = newwin(ABOUT_WIN_HEIGHT, ABOUT_WIN_WIDTH, about_start_y, about_start_x);
-  keypad(about_windows.main_window, TRUE);
-  box(about_windows.main_window, 0, 0);
+  about_window->window = newwin(ABOUT_WIN_HEIGHT, ABOUT_WIN_WIDTH, about_start_y, about_start_x);
+  keypad(about_window->window, TRUE);
+  box(about_window->window, 0, 0);
 
   // title of window
-  char* window_title = "ABOUT";
-  wattron(about_windows.main_window, A_BOLD);
-  mvwprintw(about_windows.main_window, 0, ABOUT_WIN_WIDTH/2 - strlen(window_title)/2, window_title);
-  wattroff(about_windows.main_window, A_BOLD);
+  about_window->title = "ABOUT";
+  wattron(about_window->window, A_BOLD);
+  mvwprintw(about_window->window, 0, ABOUT_WIN_WIDTH/2 - strlen(about_window->title)/2, about_window->title);
+  wattroff(about_window->window, A_BOLD);
 
   // description of window
-  mvwprintw(about_windows.main_window, 1, 3, "Share details about the Wikipedia trace game and how this program works to find");
-  mvwprintw(about_windows.main_window, 2, 3, "potential paths between a starting page to a destination page");
+  mvwprintw(about_window->window, 1, 3, "Share details about the Wikipedia trace game and how this program works to find");
+  mvwprintw(about_window->window, 2, 3, "potential paths between a starting page to a destination page");
 
   // actions at the bottom
   char* back = "(b) back";
   char* quit = "(q) quit";
-  mvwprintw(about_windows.main_window, ABOUT_WIN_HEIGHT - 3, ABOUT_WIN_WIDTH/4 - strlen(back)/2, back);
-  mvwprintw(about_windows.main_window, ABOUT_WIN_HEIGHT - 3, ABOUT_WIN_WIDTH/2 + ABOUT_WIN_WIDTH/4 - strlen(quit)/2, quit);
+  mvwprintw(about_window->window, ABOUT_WIN_HEIGHT - 3, ABOUT_WIN_WIDTH/4 - strlen(back)/2, back);
+  mvwprintw(about_window->window, ABOUT_WIN_HEIGHT - 3, ABOUT_WIN_WIDTH/2 + ABOUT_WIN_WIDTH/4 - strlen(quit)/2, quit);
 
   // creating a scrollable interior
   about_windows.text_field = newpad(ABOUT_PAD_ROWS, ABOUT_PAD_COLS);
@@ -616,7 +674,7 @@ static void show_about() {
   int view_height = view_bot - view_top + 1;
 
   // once outside loop so renders without extra key press
-  wrefresh(about_windows.main_window);
+  wrefresh(about_window->window);
   prefresh(about_windows.text_field, 
            pad_scroll_line, 0,
            view_top, view_left,
@@ -624,13 +682,13 @@ static void show_about() {
 
   // scrollable view of information
   while (1) {
-    wrefresh(about_windows.main_window);
+    wrefresh(about_window->window);
     prefresh(about_windows.text_field,
              pad_scroll_line, 0,
              view_top, view_left,
              view_bot, view_right);
 
-    int ch = wgetch(about_windows.main_window);
+    int ch = wgetch(about_window->window);
     switch(ch) {
       case KEY_UP:
         if (pad_scroll_line > 0) { pad_scroll_line--; }
@@ -640,13 +698,13 @@ static void show_about() {
         break;
       case 'b':
       case 'B':
-        delwin(about_windows.main_window);
+        delwin(about_window->window);
         delwin(about_windows.text_field);
         init_view();
         return;
       case 'q':
       case 'Q':
-        delwin(about_windows.main_window);
+        delwin(about_window->window);
         delwin(about_windows.text_field);
         endwin();
         return;

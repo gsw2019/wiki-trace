@@ -64,18 +64,23 @@ typedef struct {
 } TraceData;
 
 typedef struct {
+  WINDOW* window;
+  char* title;
+} WindowProps;
+
+typedef struct {
   WINDOW* welcome_window;
   WINDOW* author_window;
   WINDOW* menu_window;
 } InitWindows;
 
 typedef struct {
-  WINDOW* main_window;
-  WINDOW* spage_window;
+  WindowProps main_window;
+  WindowProps spage_window;
   WINDOW* spage_text_field;
-  WINDOW* dpage_window;
+  WindowProps dpage_window;
   WINDOW* dpage_text_field;
-  WINDOW* hist_window; 
+  WindowProps hist_window; 
 } TraceWindows;
 
 typedef struct {
@@ -83,7 +88,7 @@ typedef struct {
 } SettingsWindows;
 
 typedef struct {
-  WINDOW* main_window;
+  WindowProps main_window;
   WINDOW* text_field;
 } AboutWindows;
 
@@ -100,6 +105,7 @@ static void show_trace();
 static void show_trace_history(WINDOW* trace_window, int trace_window_start_y);
 static void read_user_input(int page, WINDOW* text_field, int min_row, int min_col, int view_top, int view_left, int view_bot, int view_right, int index);
 static void update_text_field_view(WINDOW* text_field, int min_row, int min_col, int view_top, int view_left, int view_bot, int view_right, int index);
+static void focus_window(WindowProps window_props, bool focus);
 void update_trace_history(TraceHistory history);
 
 // functions concerened with starting, pausing, or stopping the trace
