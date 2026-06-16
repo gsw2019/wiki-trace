@@ -1,10 +1,13 @@
 /**
- * function prototypes for the ncurses user interface of wiki-trace
+ * function prototypes, macros, and struts for the ncurses user interface of wiki-trace
  *
+ * @author Garret Wilson
  */
 
 
 #include <ncurses.h>
+#include <pthread.h>
+
 
 #ifndef VIEW_H
 #define VIEW_H
@@ -39,11 +42,6 @@
 
 
 typedef struct {
-  char start_page[256];
-  char dest_page[256];
-} TracePages;
-
-typedef struct {
   WINDOW* text_field;
   int min_row;
   int min_col;
@@ -52,6 +50,18 @@ typedef struct {
   int view_bot;
   int view_right;
 } TraceHistory;
+
+typedef struct {
+  char start_page[256];
+  char dest_page[256];
+  char currnt_page[256];
+  TraceHistory history;
+  int hops;
+  int complete;
+  int status;
+  char* err_message;
+  pthread_mutex_t lock;
+} TraceData;
 
 typedef struct {
   WINDOW* welcome_window;
@@ -69,7 +79,7 @@ typedef struct {
 } TraceWindows;
 
 typedef struct {
-
+  // TODO
 } SettingsWindows;
 
 typedef struct {
@@ -79,7 +89,7 @@ typedef struct {
 
 
 // functions concerened with rendering start screen
-void init_wiki_trace_view();
+void init_view();
 static void show_welcome();
 static void show_author();
 static void show_menu();
@@ -88,11 +98,13 @@ static void update_menu(int highlighted);
 // functions concerned with rendering trace screen
 static void show_trace();
 static void show_trace_history(WINDOW* trace_window, int trace_window_start_y);
-static void read_user_input(WINDOW* text_field, int min_row, int min_col, int view_top, int view_left, int view_bot, int view_right, int index);
+static void read_user_input(int page, WINDOW* text_field, int min_row, int min_col, int view_top, int view_left, int view_bot, int view_right, int index);
 static void update_text_field_view(WINDOW* text_field, int min_row, int min_col, int view_top, int view_left, int view_bot, int view_right, int index);
-void update_trace_history();
-TracePages get_trace_pages();
-TraceHistory get_trace_history();
+void update_trace_history(TraceHistory history);
+
+// functions concerened with starting, pausing, or stopping the trace
+static void init_trace_verification();
+static void update_trace_verification();
 
 // functions concerned with rendering settings screen
 static void show_settings();

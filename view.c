@@ -1,14 +1,17 @@
 /**
- * implementations of view.h prototypes
+ * implementations of view.h logic
  *
+ * @author Garret Wilson
  */
 
 
+#include <pthread.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
 
 #include "view.h"
+#include "fetcher.h"
 
 
 // menu details
@@ -20,17 +23,24 @@ char* choices[] = {   // menu choices
 };
 int n_choices = sizeof(choices) / sizeof(char*);
 
-TracePages pages;   // store pages provided by user
-TraceHistory history;  // accessible window that trace history is written to
+pthread_t worker;   // worker thread for all none view stuff
+TraceData trace_data = {   // shared data struct for view and all else
+  .start_page = {0},
+  .dest_page = {0},
+  .currnt_page = {0},
+  .status = -1,
+  .lock = PTHREAD_MUTEX_INITIALIZER
+};
 
 InitWindows init_windows;   // launch screen windows
 TraceWindows trace_windows;   // trace screen windows
 AboutWindows about_windows;   // about screen windows
 
+
 /*
  * Initialize ncurses stdscr window with a welcome, menu, and author acknowledgment.
  */
-void init_wiki_trace_view() {
+void init_view() {
   clear();
   refresh();
 
@@ -72,8 +82,6 @@ void init_wiki_trace_view() {
 
 /*
  * Show window for welcome message.
- *
- * @param welcome_window: window where message will be written
  */
 static void show_welcome() {
   box(init_windows.welcome_window, 0, 0);
@@ -91,8 +99,6 @@ static void show_welcome() {
 
 /*
  * Show a window for author.
- *
- * @param author_window: window where author info will be written
  */
 static void show_author() {
   char* author_tag = "(c) Garret Wilson 2026";
@@ -111,8 +117,6 @@ static void show_author() {
 /*
  * Displays a welcome message and menu that allows the user to make a selection
  * between starting the game, adjusting some settings, showing an about page, or exiting.
- *
- * @param menu_window: window which will hold menu options and short descriptions
  */
 static void show_menu() {
   int highlighted = 1;    // need var for tracking highlighted
@@ -155,7 +159,7 @@ static void show_menu() {
       show_trace();
     case OPT_SETTINGS:
       // TODO
-      return;
+      break;
     case OPT_ABOUT:
       delwin(init_windows.menu_window);
       delwin(init_windows.author_window);
@@ -172,7 +176,6 @@ static void show_menu() {
 /*
  * Redraw the menu after a new key is pressed to move the in-selection cursor.
  *
- * @param menu_window: the window that will be rerendered
  * @param highlighted: value that desscribes which selection the user is hovering on
  */
 static void update_menu(int highlighted) {
@@ -193,7 +196,7 @@ static void update_menu(int highlighted) {
       mvwprintw(init_windows.menu_window, y, x, choices[i]);
     }
 
-    y++;    // move down for each new choice
+    y++;    // move down for each choice
   }
 
   wrefresh(init_windows.menu_window);
@@ -216,7 +219,7 @@ static void show_trace() {
   box(trace_windows.main_window, 0, 0);
 
   // window title
-  char* trace_window_title = "Run A Trace";
+  char* trace_window_title = "RUN A TRACE";
   wattron(trace_windows.main_window, A_BOLD);
   mvwprintw(trace_windows.main_window, 0, TRACE_WIN_WIDTH/2 - strlen(trace_window_title)/2, trace_window_title);
   wattroff(trace_windows.main_window, A_BOLD);
@@ -274,22 +277,23 @@ static void show_trace() {
   // inner window for trace history 
   int hist_start_y = trace_window_start_y + 9;
   int hist_start_x = trace_window_start_x + (TRACE_WIN_WIDTH - HIST_WIN_WIDTH) / 2;
-  WINDOW* hist_window = newwin(HIST_WIN_HEIGHT, HIST_WIN_WIDTH, hist_start_y, hist_start_x);
-  box(hist_window, 0, 0);
+  trace_windows.hist_window = newwin(HIST_WIN_HEIGHT, HIST_WIN_WIDTH, hist_start_y, hist_start_x);
+  box(trace_windows.hist_window, 0, 0);
   char* hist_window_title = "trace history";
-  mvwprintw(hist_window, 0, 2, hist_window_title);
+  mvwprintw(trace_windows.hist_window, 0, 2, hist_window_title);
 
   // text field for trace history
-  history.text_field = newpad(HIST_TEXT_FIELD_HEIGHT, HIST_TEXT_FIELD_WIDTH);
-  history.min_row = 0;
-  history.min_col = 0;
-  history.view_top = hist_start_y + 1;
-  history.view_left = hist_start_x + 2;
-  history.view_bot = hist_start_y + HIST_WIN_HEIGHT - 2;
-  history.view_right = hist_start_x + HIST_WIN_WIDTH - 2;
+  trace_data.history.text_field = newpad(HIST_TEXT_FIELD_HEIGHT, HIST_TEXT_FIELD_WIDTH);
+  trace_data.history.min_row = 0;
+  trace_data.history.min_col = 0;
+  trace_data.history.view_top = hist_start_y + 1;
+  trace_data.history.view_left = hist_start_x + 2;
+  trace_data.history.view_bot = hist_start_y + HIST_WIN_HEIGHT - 2;
+  trace_data.history.view_right = hist_start_x + HIST_WIN_WIDTH - 2;
+  TraceHistory history = trace_data.history;
 
   for (int i = 0; i < HIST_TEXT_FIELD_HEIGHT; i++) {
-    mvwprintw(history.text_field, i, 1, "this is entry #%d", i);
+    mvwprintw(trace_data.history.text_field, i, 1, "this is entry #%d", i);
   }
 
   // actions at the bottom
@@ -311,7 +315,6 @@ static void show_trace() {
   mvwprintw(trace_windows.main_window, row1, col_width*2 + col_width/2 - strlen(resume)/2, resume);
   mvwprintw(trace_windows.main_window, row1, col_width*3 + col_width/2 - strlen(stop)/2, stop);
 
-
   mvwprintw(trace_windows.main_window, row2, col_width*0 + col_width/2 - strlen(change_spage)/2, change_spage);
   mvwprintw(trace_windows.main_window, row2, col_width*1 + col_width/2 - strlen(change_dpage)/2, change_dpage);
   mvwprintw(trace_windows.main_window, row2, col_width*2 + col_width/2 - strlen(back)/2, back);
@@ -327,13 +330,15 @@ static void show_trace() {
   prefresh(history.text_field, history.min_row, history.min_col, history.view_top, history.view_left, history.view_bot, history.view_right);
 
   // handle actions via key presses
+  wtimeout(trace_windows.main_window, 100);   // errors out wgetch after 100 ms, falls to defualt
   while (1) {
     int ch = wgetch(trace_windows.main_window);
+    int index;
 
     switch(ch) {
       case 's':
       case 'S':
-        // TODO
+        init_trace_verification();
         break;
       case 'p':
       case 'P':
@@ -349,11 +354,17 @@ static void show_trace() {
         break;
       case 'f':
       case 'F':
-        read_user_input(trace_windows.spage_text_field, spage_min_row, spage_min_col, spage_view_top, spage_view_left, spage_view_bot, spage_view_right, strlen(pages.start_page));
+        pthread_mutex_lock(&trace_data.lock);
+        index = strlen(trace_data.start_page);
+        pthread_mutex_unlock(&trace_data.lock);
+        read_user_input(1, trace_windows.spage_text_field, spage_min_row, spage_min_col, spage_view_top, spage_view_left, spage_view_bot, spage_view_right, index);
         break;
       case 't':
       case 'T':
-        read_user_input(trace_windows.dpage_text_field, dpage_min_row, dpage_min_col, dpage_view_top, dpage_view_left, dpage_view_bot, dpage_view_right, strlen(pages.dest_page));
+        pthread_mutex_lock(&trace_data.lock);
+        index = strlen(trace_data.dest_page);
+        pthread_mutex_unlock(&trace_data.lock);
+        read_user_input(2, trace_windows.dpage_text_field, dpage_min_row, dpage_min_col, dpage_view_top, dpage_view_left, dpage_view_bot, dpage_view_right, index);
         break;
       case 'b':
       case 'B':
@@ -364,7 +375,8 @@ static void show_trace() {
         delwin(trace_windows.dpage_text_field);
         delwin(trace_windows.hist_window);
         delwin(history.text_field);
-        init_wiki_trace_view();
+        init_view();
+        break;
       case 'q':
       case 'Q':
         delwin(trace_windows.main_window);
@@ -376,23 +388,82 @@ static void show_trace() {
         delwin(history.text_field);
         endwin();
         return;
+      default:
+        break;
     }
+
+    update_trace_verification();    // checks every 100ms to see if worker finished
   }
 }
 
 
 /*
- * as the trace runs, call this function which will write updates into the history
+ * Sends of a worker to verify the pages provided exist
  */
-void update_trace_history() {
+void init_trace_verification() {
+  pthread_join(worker, NULL);
 
+  // show immediate feedback
+  pthread_mutex_lock(&trace_data.lock);
+  TraceHistory history = trace_data.history;
+  wclear(history.text_field);
+  mvwprintw(history.text_field, 1, 2, "Verifying pages...");
+  prefresh(history.text_field, history.min_row, history.min_col, history.view_top, history.view_left, history.view_bot, history.view_right);
+  pthread_mutex_unlock(&trace_data.lock);
+
+  pthread_create(&worker, NULL, verify_pages, &trace_data);
+}
+
+
+/*
+ * Continuously checks struct shared with worker to see if its completed
+ */
+void update_trace_verification() {
+  pthread_mutex_lock(&trace_data.lock);
+  if (trace_data.status == 1) {    // missing input
+    trace_data.status = -1;
+    TraceHistory history = trace_data.history;
+    wclear(history.text_field);
+    char* invalid_msg = "Missing page titles. Please enter two Wikipedia pages.";
+    mvwprintw(history.text_field, 1, 2, invalid_msg);
+    prefresh(history.text_field, history.min_row, history.min_col, history.view_top, history.view_left, history.view_bot, history.view_right);
+  }
+  else if (trace_data.status == 2) {   // cJSON parse error
+    trace_data.status = -1;
+    TraceHistory history = trace_data.history;
+    wclear(history.text_field);
+    mvwprintw(history.text_field, 1, 2, trace_data.err_message);
+    prefresh(history.text_field, history.min_row, history.min_col, history.view_top, history.view_left, history.view_bot, history.view_right);
+  }
+  else if (trace_data.status == 3) {   // page doesnt exists
+    trace_data.status = -1;
+    TraceHistory history = trace_data.history;
+    wclear(history.text_field);
+    mvwprintw(history.text_field, 1, 2, trace_data.err_message);
+    prefresh(history.text_field, history.min_row, history.min_col, history.view_top, history.view_left, history.view_bot, history.view_right);
+  }
+  else if (trace_data.status == 0) {    // valid pages 
+    trace_data.status = -1;
+    TraceHistory history = trace_data.history;
+    wclear(history.text_field);
+
+    // TODO
+
+    /* endwin(); */
+    /* printf("verified start page: %s\n", trace_data.start_page); */
+    /* printf("verified dest page: %s\n", trace_data.dest_page); */ 
+    /* exit(0); */
+
+    prefresh(history.text_field, history.min_row, history.min_col, history.view_top, history.view_left, history.view_bot, history.view_right);
+  }
+  pthread_mutex_unlock(&trace_data.lock);
 }
 
 
 /*
  * Read chars entered into the start page text field or the destination page text field.
- * Also updates the text field on key press.
- *
+ * 
+ * @param page: a flag to know which text field is being written to
  * @param text_field: the window to display and read text from
  * @param min_row: the starting row displayed in the window
  * @param min_col: the staring column displyed in the window
@@ -402,42 +473,48 @@ void update_trace_history() {
  * @param view_right: location of the right of the window
  * @param index: the current index of the cursor and buffer
  */
-static void read_user_input(WINDOW* text_field, int min_row, int min_col, int view_top, int view_left, int view_bot, int view_right, int index) {
+static void read_user_input(int page, WINDOW* text_field, int min_row, int min_col, int view_top, int view_left, int view_bot, int view_right, int index) {
   curs_set(1);
   wmove(text_field, 0, index);
   prefresh(text_field, 0, 0, view_top, view_left, view_bot, view_right);
   keypad(text_field, TRUE);
-  char page[256];
+
+  // prefill if editing populated text field
+  char text[256] = {0};
+  pthread_mutex_lock(&trace_data.lock);
+  if (page == 1) { strcpy(text, trace_data.start_page); }
+  else { strcpy(text, trace_data.dest_page); }
+  pthread_mutex_unlock(&trace_data.lock);
 
   while(1) {
     int ch = wgetch(text_field);
     // ASCCII chars
-    if (ch >= 32 && ch <= 127 && index <= 255) {
+    if (ch >= 32 && ch <= 126 && index <= 255) {
       waddch(text_field, ch);   // add to text field
-      page[index] = ch;    // store it
+      text[index] = ch;    // store it
       index++;    // increment cursor and next spot to fill in buffer
       update_text_field_view(text_field, min_row, min_col, view_top, view_left, view_bot, view_right, index);
     }
     // deleting chars
-    else if (ch == KEY_BACKSPACE && index >= 0) {
-      // deletes the last char to completely clear text field
-      if (index == 0) { 
+    else if ( (ch == KEY_BACKSPACE || ch == 127 || ch == 8) && index >= 0) {
+      if (index == 0) {   // deletes the last char to completely clear text field
         waddch(text_field, ' ');
         wmove(text_field, 0, index);
         prefresh(text_field, 0, 0, view_top, view_left, view_bot, view_right);
         continue;
       }
-      waddch(text_field, ' ');
-      page[index] = '\0';
       index--;
+      mvwaddch(text_field, 0, index, ' ');
+      text[index] = '\0';
       update_text_field_view(text_field, min_row, min_col, view_top, view_left, view_bot, view_right, index);
     }
     // user pressed enter
     else if (ch == 10) {
-      int starty, startx;
-      getbegyx(text_field, starty, startx);
-      if (startx < COLS / 2) { strcpy(pages.start_page, page); }
-      else { strcpy(pages.dest_page, page); }
+      text[index] = '\0';
+      pthread_mutex_lock(&trace_data.lock);
+      if (page == 1) { strcpy(trace_data.start_page, text); }
+      else { strcpy(trace_data.dest_page, text); }
+      pthread_mutex_unlock(&trace_data.lock);
       curs_set(0);
       return;
     }
@@ -446,7 +523,7 @@ static void read_user_input(WINDOW* text_field, int min_row, int min_col, int vi
 
 
 /*
- * updates the text field view when user types
+ * Updates the text field view when user types in the start page or destination page text field
  *
  * @param text_field: the window to display and read text from
  * @param min_row: the starting row displayed in the window
@@ -473,23 +550,17 @@ static void update_text_field_view(WINDOW* text_field, int min_row, int min_col,
 
 
 /*
- * getter for trace pages
+ * Used to update the trace history view.
  *
- * @return pages: a struct containing start page and destination page
+ * @param history: a struct containing all necesary fields to update its display text
  */
-TracePages get_trace_pages() { return pages; }
+void update_trace_history(TraceHistory history) {
+  // TODO
+}
 
 
 /*
- * getter for history text field window
- *
- * @retun history: struct with all necessary fields to write to and update a text field window
- */
-TraceHistory get_trace_history() { return history; }
-
-
-/*
- * Display screen that allows user to adjust some settings of the tracer
+ * Display screen that allows user to adjust some settings of the tracer.
  */
 static void show_settings() {
   // TODO
@@ -522,7 +593,7 @@ static void show_about() {
   mvwprintw(about_windows.main_window, 2, 3, "potential paths between a starting page to a destination page");
 
   // actions at the bottom
-  char* back = "(b) back to menu";
+  char* back = "(b) back";
   char* quit = "(q) quit";
   mvwprintw(about_windows.main_window, ABOUT_WIN_HEIGHT - 3, ABOUT_WIN_WIDTH/4 - strlen(back)/2, back);
   mvwprintw(about_windows.main_window, ABOUT_WIN_HEIGHT - 3, ABOUT_WIN_WIDTH/2 + ABOUT_WIN_WIDTH/4 - strlen(quit)/2, quit);
@@ -571,7 +642,7 @@ static void show_about() {
       case 'B':
         delwin(about_windows.main_window);
         delwin(about_windows.text_field);
-        init_wiki_trace_view();
+        init_view();
         return;
       case 'q':
       case 'Q':
