@@ -41,21 +41,24 @@
 #define ABOUT_PAD_COLS         75
 
 
+// tracks all properties that a window might have
 typedef struct {
-  WINDOW* text_field;
+  WINDOW* window;
+  char* title;
   int min_row;
   int min_col;
   int view_top;
   int view_left;
   int view_bot;
   int view_right;
-} TraceHistory;
+} WindowProps;
 
+// carries info over threads
 typedef struct {
   char start_page[256];
   char dest_page[256];
   char currnt_page[256];
-  TraceHistory history;
+  WindowProps history;
   int hops;
   int complete;
   int status;
@@ -63,33 +66,33 @@ typedef struct {
   pthread_mutex_t lock;
 } TraceData;
 
-typedef struct {
-  WINDOW* window;
-  char* title;
-} WindowProps;
-
+// tracks all launch screen windows
 typedef struct {
   WINDOW* welcome_window;
   WINDOW* author_window;
   WINDOW* menu_window;
 } InitWindows;
 
+// tracks all trace screen windows
 typedef struct {
   WindowProps main_window;
   WindowProps spage_window;
-  WINDOW* spage_text_field;
+  WindowProps spage_text_field;
   WindowProps dpage_window;
-  WINDOW* dpage_text_field;
-  WindowProps hist_window; 
+  WindowProps dpage_text_field;
+  WindowProps hist_window;
+  WindowProps hist_text_field;
 } TraceWindows;
 
+// tracks all settings screen windows
 typedef struct {
   // TODO
 } SettingsWindows;
 
+// tracks all about screen windows
 typedef struct {
   WindowProps main_window;
-  WINDOW* text_field;
+  WindowProps text_field;
 } AboutWindows;
 
 
@@ -103,10 +106,10 @@ static void update_menu(int highlighted);
 // functions concerned with rendering trace screen
 static void show_trace();
 static void fill_text_fields();
-static void read_user_input(int page, WINDOW* text_field, int min_row, int min_col, int view_top, int view_left, int view_bot, int view_right);
-static void update_text_field(WINDOW* text_field, int min_row, int min_col, int view_top, int view_left, int view_bot, int view_right, int index);
-static void focus_window(WindowProps window_props, bool focus);
-void update_trace_history(TraceHistory history);
+static void read_user_input(int page, WindowProps* text_field);
+static void update_text_field(WindowProps* text_field, int index);
+static void focus_window(WindowProps* window_props, bool focus);
+void update_trace_history(WindowProps* history);
 
 // functions concerened with starting, pausing, or stopping the trace
 static void init_trace_verification();

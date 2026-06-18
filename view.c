@@ -40,15 +40,11 @@ InitWindows init_windows;   // launch screen windows
 TraceWindows trace_windows;   // trace screen windows
 AboutWindows about_windows;   // about screen windows
 
-FILE* file;
-
 
 /*
  * Initialize ncurses stdscr window with a welcome, menu, and author acknowledgment.
  */
 void init_view() {
-  file = fopen("output.txt", "w");
-
   clear();
   refresh();
 
@@ -222,7 +218,7 @@ static void show_trace() {
   // clear stdscr
   clear();
   refresh();
-
+ 
   // build trace window
   WindowProps* main_window = &trace_windows.main_window;
   int trace_window_start_y = (LINES - TRACE_WIN_HEIGHT) / 2;
@@ -259,16 +255,14 @@ static void show_trace() {
   mvwprintw(spage_window->window, 0, 2, "%s", spage_window->title);
 
   // text field for spage window
-  int spage_text_field_y = spage_window_y + 1;
-  int spage_text_field_x = spage_window_x + 1;
-  trace_windows.spage_text_field = newpad(TEXT_FIELD_HEIGHT, TEXT_FIELD_WIDTH);
-  int spage_min_row = 0;
-  int spage_min_col = 0;
-  int spage_view_top  = spage_window_y + 1;
-  int spage_view_left = spage_window_x + 1;
-  int spage_view_bot  = spage_window_y + 1;
-  int spage_view_right = spage_window_x + TEXT_WIN_WIDTH - 2;
-  int spage_view_height = spage_view_bot - spage_view_top + 1;
+  WindowProps* spage_text_field = &trace_windows.spage_text_field;
+  spage_text_field->window = newpad(TEXT_FIELD_HEIGHT, TEXT_FIELD_WIDTH);
+  spage_text_field->min_row = 0;
+  spage_text_field->min_col = 0;
+  spage_text_field->view_top = spage_window_y + 1;
+  spage_text_field->view_left = spage_window_x + 1;
+  spage_text_field->view_bot = spage_window_y + 1;
+  spage_text_field->view_right = spage_window_x + TEXT_WIN_WIDTH - 2;
 
   // inner window for destination page (dpage)
   WindowProps* dpage_window = &trace_windows.dpage_window;
@@ -281,16 +275,14 @@ static void show_trace() {
   mvwprintw(dpage_window->window, 0, 2, "%s", dpage_window->title);
 
   // text field for dpage window
-  trace_windows.dpage_text_field = newpad(TEXT_FIELD_HEIGHT, TEXT_FIELD_WIDTH);
-  int dpage_min_row = 0;
-  int dpage_min_col = 0;
-  int dpage_view_top  = dpage_window_y + 1;
-  int dpage_view_left = dpage_window_x + 1;
-  int dpage_view_bot  = dpage_window_y + 1;
-  int dpage_view_right = dpage_window_x + TEXT_WIN_WIDTH - 2;
-
-  // color to draw active window borders
-  init_pair(1, COLOR_CYAN, COLOR_BLACK);
+  WindowProps* dpage_text_field = &trace_windows.dpage_text_field;
+  dpage_text_field->window = newpad(TEXT_FIELD_HEIGHT, TEXT_FIELD_WIDTH);
+  dpage_text_field->min_row = 0;
+  dpage_text_field->min_col = 0;
+  dpage_text_field->view_top  = dpage_window_y + 1;
+  dpage_text_field->view_left = dpage_window_x + 1;
+  dpage_text_field->view_bot  = dpage_window_y + 1;
+  dpage_text_field->view_right = dpage_window_x + TEXT_WIN_WIDTH - 2;
 
   // inner window for trace history
   WindowProps* hist_window = &trace_windows.hist_window;
@@ -303,17 +295,20 @@ static void show_trace() {
   mvwprintw(hist_window->window, 0, 2, "%s", hist_window->title);
 
   // text field for trace history
-  trace_data.history.text_field = newpad(HIST_TEXT_FIELD_HEIGHT, HIST_TEXT_FIELD_WIDTH);
-  trace_data.history.min_row = 0;
-  trace_data.history.min_col = 0;
-  trace_data.history.view_top = hist_start_y + 1;
-  trace_data.history.view_left = hist_start_x + 2;
-  trace_data.history.view_bot = hist_start_y + HIST_WIN_HEIGHT - 2;
-  trace_data.history.view_right = hist_start_x + HIST_WIN_WIDTH - 2;
-  TraceHistory history = trace_data.history;
+  WindowProps* hist_text_field = &trace_windows.hist_text_field;
+  hist_text_field->window = newpad(HIST_TEXT_FIELD_HEIGHT, HIST_TEXT_FIELD_WIDTH);
+  hist_text_field->min_row = 0;
+  hist_text_field->min_col = 0;
+  hist_text_field->view_top = hist_start_y + 1;
+  hist_text_field->view_left = hist_start_x + 2;
+  hist_text_field->view_bot = hist_start_y + HIST_WIN_HEIGHT - 2;
+  hist_text_field->view_right = hist_start_x + HIST_WIN_WIDTH - 2;
+
+  // make sure trace data struct has history text field info
+  trace_data.history = trace_windows.hist_text_field;
 
   for (int i = 0; i < HIST_TEXT_FIELD_HEIGHT; i++) {
-    mvwprintw(trace_data.history.text_field, i, 1, "this is entry #%d", i);
+    mvwprintw(hist_text_field->window, i, 1, "this is entry #%d", i);
   }
 
   // actions at the bottom
@@ -348,9 +343,9 @@ static void show_trace() {
   wrefresh(spage_window->window);
   wrefresh(dpage_window->window);
   wrefresh(hist_window->window);
-  prefresh(trace_windows.spage_text_field, spage_min_row, spage_min_col, spage_view_top, spage_view_left, spage_view_bot, spage_view_right);
-  prefresh(trace_windows.dpage_text_field, dpage_min_row, dpage_min_col, dpage_view_top, dpage_view_left, dpage_view_bot, dpage_view_right);
-  prefresh(history.text_field, history.min_row, history.min_col, history.view_top, history.view_left, history.view_bot, history.view_right);
+  prefresh(spage_text_field->window, spage_text_field->min_row, spage_text_field->min_col, spage_text_field->view_top, spage_text_field->view_left, spage_text_field->view_bot, spage_text_field->view_right);
+  prefresh(dpage_text_field->window, dpage_text_field->min_row, dpage_text_field->min_col, dpage_text_field->view_top, dpage_text_field->view_left, dpage_text_field->view_bot, dpage_text_field->view_right);
+  prefresh(hist_text_field->window, hist_text_field->min_row, hist_text_field->min_col, hist_text_field->view_top, hist_text_field->view_left, hist_text_field->view_bot, hist_text_field->view_right);
 
   // handle actions via key presses
   keypad(main_window->window, TRUE);
@@ -362,7 +357,7 @@ static void show_trace() {
     switch(ch) {
       case 's':
       case 'S':
-        focus_window(trace_windows.hist_window, true);
+        focus_window(&trace_windows.hist_window, true);
         init_trace_verification();
         break;
       case 'p':
@@ -379,34 +374,34 @@ static void show_trace() {
         break;
       case 'f':
       case 'F':
-        focus_window(trace_windows.hist_window, false);
-        read_user_input(1, trace_windows.spage_text_field, spage_min_row, spage_min_col, spage_view_top, spage_view_left, spage_view_bot, spage_view_right);
+        focus_window(&trace_windows.hist_window, false);
+        read_user_input(1, spage_text_field);
         break;
       case 't':
       case 'T':
-        focus_window(trace_windows.hist_window, false);
-        read_user_input(2, trace_windows.dpage_text_field, dpage_min_row, dpage_min_col, dpage_view_top, dpage_view_left, dpage_view_bot, dpage_view_right);
+        focus_window(&trace_windows.hist_window, false);
+        read_user_input(2, dpage_text_field);
         break;
       case 'b':
       case 'B':
         delwin(main_window->window);
         delwin(spage_window->window);
-        delwin(trace_windows.spage_text_field);
+        delwin(spage_text_field->window);
         delwin(dpage_window->window);
-        delwin(trace_windows.dpage_text_field);
+        delwin(dpage_text_field->window);
         delwin(hist_window->window);
-        delwin(history.text_field);
+        delwin(hist_window->window);
         init_view();
         return;
       case 'q':
       case 'Q':
         delwin(main_window->window);
         delwin(spage_window->window);
-        delwin(trace_windows.spage_text_field);
+        delwin(spage_text_field->window);
         delwin(dpage_window->window);
-        delwin(trace_windows.dpage_text_field);
+        delwin(dpage_text_field->window);
         delwin(hist_window->window);
-        delwin(history.text_field);
+        delwin(hist_window->window);
         endwin();
         return;
       default:
@@ -424,10 +419,10 @@ static void show_trace() {
 static void fill_text_fields() {
   pthread_mutex_lock(&trace_data.lock);
   if (strlen(trace_data.start_page)) {
-    wprintw(trace_windows.spage_text_field, "%s", trace_data.start_page);
+    wprintw(trace_windows.spage_text_field.window, "%s", trace_data.start_page);
   }
   if (strlen(trace_data.dest_page)) {
-    wprintw(trace_windows.dpage_text_field, "%s", trace_data.dest_page);
+    wprintw(trace_windows.dpage_text_field.window, "%s", trace_data.dest_page);
   }
   pthread_mutex_unlock(&trace_data.lock);
 }
@@ -441,10 +436,10 @@ static void init_trace_verification() {
 
   // show immediate feedback
   pthread_mutex_lock(&trace_data.lock);
-  TraceHistory history = trace_data.history;
-  wclear(history.text_field);
-  mvwprintw(history.text_field, 1, 2, "%s", "Verifying pages...");
-  prefresh(history.text_field, history.min_row, history.min_col, history.view_top, history.view_left, history.view_bot, history.view_right);
+  WindowProps* history = &trace_data.history;
+  wclear(history->window);
+  mvwprintw(history->window, 1, 2, "%s", "Verifying pages...");
+  prefresh(history->window, history->min_row, history->min_col, history->view_top, history->view_left, history->view_bot, history->view_right);
   pthread_mutex_unlock(&trace_data.lock);
 
   pthread_create(&worker, NULL, verify_pages, &trace_data);
@@ -458,31 +453,32 @@ static void update_trace_verification() {
   pthread_mutex_lock(&trace_data.lock);
   if (trace_data.status == 1) {    // missing input
     trace_data.status = -1;
-    TraceHistory history = trace_data.history;
-    wclear(history.text_field);
+    WindowProps* history = &trace_data.history;
+    wclear(history->window);
     char* invalid_msg = "Missing page titles. Please enter two Wikipedia pages.";
-    mvwprintw(history.text_field, 1, 2, "%s", invalid_msg);
-    prefresh(history.text_field, history.min_row, history.min_col, history.view_top, history.view_left, history.view_bot, history.view_right);
+    mvwprintw(history->window, 1, 2, "%s", invalid_msg);
+    prefresh(history->window, history->min_row, history->min_col, history->view_top, history->view_left, history->view_bot, history->view_right);
   }
   else if (trace_data.status == 2) {   // cJSON parse error
     trace_data.status = -1;
-    TraceHistory history = trace_data.history;
-    wclear(history.text_field);
-    mvwprintw(history.text_field, 1, 2, "%s", trace_data.err_message);
-    prefresh(history.text_field, history.min_row, history.min_col, history.view_top, history.view_left, history.view_bot, history.view_right);
+    WindowProps* history = &trace_data.history;
+    wclear(history->window);
+    mvwprintw(history->window, 1, 2, "%s", trace_data.err_message);
+    prefresh(history->window, history->min_row, history->min_col, history->view_top, history->view_left, history->view_bot, history->view_right);
   }
   else if (trace_data.status == 3) {   // page doesnt exists
     trace_data.status = -1;
-    TraceHistory history = trace_data.history;
-    wclear(history.text_field);
-    mvwprintw(history.text_field, 1, 2, "%s", trace_data.err_message);
-    prefresh(history.text_field, history.min_row, history.min_col, history.view_top, history.view_left, history.view_bot, history.view_right);
+    WindowProps* history = &trace_data.history;
+    wclear(history->window);
+    mvwprintw(history->window, 1, 2, "%s", trace_data.err_message);
+    prefresh(history->window, history->min_row, history->min_col, history->view_top, history->view_left, history->view_bot, history->view_right);
   }
   else if (trace_data.status == 0) {    // valid pages 
     trace_data.status = -1;
-    TraceHistory history = trace_data.history;
-    wclear(history.text_field);
-
+    WindowProps* history = &trace_data.history;
+    wclear(history->window);
+    
+    mvwprintw(history->window, 1, 2, "%s", "pages valid");
     // TODO
 
     /* endwin(); */
@@ -490,7 +486,7 @@ static void update_trace_verification() {
     /* printf("verified dest page: %s\n", trace_data.dest_page); */ 
     /* exit(0); */
 
-    prefresh(history.text_field, history.min_row, history.min_col, history.view_top, history.view_left, history.view_bot, history.view_right);
+    prefresh(history->window, history->min_row, history->min_col, history->view_top, history->view_left, history->view_bot, history->view_right);
   }
   pthread_mutex_unlock(&trace_data.lock);
 }
@@ -509,12 +505,12 @@ static void update_trace_verification() {
  * @param view_right: location of the right of the window
  * @param index: the current index of the cursor and buffer
  */
-static void read_user_input(int page, WINDOW* text_field, int min_row, int min_col, int view_top, int view_left, int view_bot, int view_right) {
-  keypad(text_field, TRUE);
+static void read_user_input(int page, WindowProps* text_field) {
+  keypad(text_field->window, TRUE);
 
   // change border color to show avtive window
-  if (page == 1) { focus_window(trace_windows.spage_window, true); }
-  else { focus_window(trace_windows.dpage_window, true); }
+  if (page == 1) { focus_window(&trace_windows.spage_window, true); }
+  else { focus_window(&trace_windows.dpage_window, true); }
 
   // prefill memory if editing populated text field
   char text[256] = {0};
@@ -531,43 +527,43 @@ static void read_user_input(int page, WINDOW* text_field, int min_row, int min_c
   pthread_mutex_unlock(&trace_data.lock);
 
   curs_set(1);
-  wmove(text_field, 0, index);
-  prefresh(text_field, 0, 0, view_top, view_left, view_bot, view_right);
+  wmove(text_field->window, 0, index);
+  prefresh(text_field->window, 0, 0, text_field->view_top, text_field->view_left, text_field->view_bot, text_field->view_right);
 
   while(1) {
-    int ch = wgetch(text_field);
+    int ch = wgetch(text_field->window);
 
     // ASCCII chars
     if (ch >= 32 && ch <= 126 && index <= 255) {
-      waddch(text_field, ch);   // add to text field
+      waddch(text_field->window, ch);   // add to text field
       text[index] = ch;    // store it
       index++;    // increment cursor and next spot to fill in buffer
-      update_text_field(text_field, min_row, min_col, view_top, view_left, view_bot, view_right, index);
+      update_text_field(text_field, index);
     }
     // deleting chars
     else if ( (ch == KEY_BACKSPACE || ch == 127 || ch == 8) && index >= 0) {
       if (index == 0) {   // deletes the last char to completely clear text field
-        waddch(text_field, ' ');
-        wmove(text_field, 0, index);
-        prefresh(text_field, 0, 0, view_top, view_left, view_bot, view_right);
+        waddch(text_field->window, ' ');
+        wmove(text_field->window, 0, index);
+        prefresh(text_field->window, 0, 0, text_field->view_top, text_field->view_left, text_field->view_bot, text_field->view_right);
         continue;
       }
       index--;
-      mvwaddch(text_field, 0, index, ' ');
+      mvwaddch(text_field->window, 0, index, ' ');
       text[index] = '\0';
-      update_text_field(text_field, min_row, min_col, view_top, view_left, view_bot, view_right, index);
+      update_text_field(text_field, index);
     }
     // user pressed enter
     else if (ch == 10) {
       // change window border color
       if (page == 1) {
-        focus_window(trace_windows.spage_window, false);
-        update_text_field(text_field, min_row, min_col, view_top, view_left, view_bot, view_right, index);
+        focus_window(&trace_windows.spage_window, false);
+        update_text_field(text_field, index);
         curs_set(0);
       }
       else {
-        focus_window(trace_windows.dpage_window, false);
-        update_text_field(text_field, min_row, min_col, view_top, view_left, view_bot, view_right, index);
+        focus_window(&trace_windows.dpage_window, false);
+        update_text_field(text_field, index);
         curs_set(0);
       }
 
@@ -595,7 +591,7 @@ static void read_user_input(int page, WINDOW* text_field, int min_row, int min_c
  * @param view_right: location of the right of the window
  * @param index: the current index of the cursor and buffer
  */
-static void update_text_field(WINDOW* text_field, int min_row, int min_col, int view_top, int view_left, int view_bot, int view_right, int index) {
+static void update_text_field(WindowProps* text_field, int index) {
   int new_min_col;
 
   if (index >= TEXT_WIN_WIDTH - 2) {
@@ -605,26 +601,29 @@ static void update_text_field(WINDOW* text_field, int min_row, int min_col, int 
     new_min_col = 0;
   }
 
-  wmove(text_field, 0, index);
-  prefresh(text_field, min_row, new_min_col, view_top, view_left, view_bot, view_right);
+  wmove(text_field->window, 0, index);
+  prefresh(text_field->window, text_field->min_row, new_min_col, text_field->view_top, text_field->view_left, text_field->view_bot, text_field->view_right);
 }
 
 
 /*
  * bring a window into focus by changing its border color
  */
-static void focus_window(WindowProps window_props, bool focus) {
+static void focus_window(WindowProps* window_props, bool focus) {
+  // color to draw active window borders
+  init_pair(1, COLOR_CYAN, COLOR_BLACK);
+
   if (focus) {
-    wattron(window_props.window, COLOR_PAIR(1));
-    box(window_props.window, 0, 0);
-    mvwprintw(window_props.window, 0, 2, "%s", window_props.title);
-    wattroff(window_props.window, COLOR_PAIR(1));
-    wrefresh(window_props.window);
+    wattron(window_props->window, COLOR_PAIR(1));
+    box(window_props->window, 0, 0);
+    mvwprintw(window_props->window, 0, 2, "%s", window_props->title);
+    wattroff(window_props->window, COLOR_PAIR(1));
+    wrefresh(window_props->window);
   }
   else {
-    box(window_props.window, 0, 0);
-    mvwprintw(window_props.window, 0, 2, "%s", window_props.title);
-    wrefresh(window_props.window);
+    box(window_props->window, 0, 0);
+    mvwprintw(window_props->window, 0, 2, "%s", window_props->title);
+    wrefresh(window_props->window);
   }
 }
 
@@ -634,7 +633,7 @@ static void focus_window(WindowProps window_props, bool focus) {
  *
  * @param history: a struct containing all necesary fields to update its display text
  */
-void update_trace_history(TraceHistory history) {
+void update_trace_history(WindowProps* history) {
   // TODO
 }
 
@@ -680,12 +679,13 @@ static void show_about() {
   mvwprintw(about_window->window, ABOUT_WIN_HEIGHT - 3, ABOUT_WIN_WIDTH/2 + ABOUT_WIN_WIDTH/4 - strlen(quit)/2, "%s", quit);
 
   // creating a scrollable interior
-  about_windows.text_field = newpad(ABOUT_PAD_ROWS, ABOUT_PAD_COLS);
+  WindowProps* about_text_field = &about_windows.text_field;
+  about_text_field->window = newpad(ABOUT_PAD_ROWS, ABOUT_PAD_COLS);
 
   // write aactual info to the scrollable area
   // TODO
   for (int i = 0; i < ABOUT_PAD_ROWS; i++) {
-    mvwprintw(about_windows.text_field, i, 1, "here is a temp entery inside this scrollaable area that I want #%d", i + 1);
+    mvwprintw(about_text_field->window, i, 1, "here is a temp entery inside this scrollaable area that I want #%d", i + 1);
   }
 
   // bounds for the scrollable window
@@ -698,7 +698,7 @@ static void show_about() {
 
   // once outside loop so renders without extra key press
   wrefresh(about_window->window);
-  prefresh(about_windows.text_field, 
+  prefresh(about_text_field->window, 
            pad_scroll_line, 0,
            view_top, view_left,
            view_bot, view_right);
@@ -706,7 +706,7 @@ static void show_about() {
   // scrollable view of information
   while (1) {
     wrefresh(about_window->window);
-    prefresh(about_windows.text_field,
+    prefresh(about_text_field->window,
              pad_scroll_line, 0,
              view_top, view_left,
              view_bot, view_right);
@@ -722,18 +722,14 @@ static void show_about() {
       case 'b':
       case 'B':
         delwin(about_window->window);
-        delwin(about_windows.text_field);
+        delwin(about_text_field->window);
         init_view();
         return;
       case 'q':
       case 'Q':
         delwin(about_window->window);
-        delwin(about_windows.text_field);
-        fprintf(file, "before about window quit\n");
-        fflush(file);
+        delwin(about_text_field->window);
         endwin();
-        fprintf(file, "after about window quit\n");
-        fflush(file);
         return;
     }
 
