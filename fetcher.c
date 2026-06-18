@@ -1,5 +1,5 @@
 /**
- * function implementations for the fetcher logic
+ * Implementations for the fetcher.h prototypes. Handles requests for Wikipedia data via curl
  *
  * @author Garret Wilson
  */

@@ -1,5 +1,5 @@
 /**
- * function prototypes, macros, and struts for the ncurses user interface of wiki-trace
+ * Prototypes, macros, and struts for the ncurses user interface of wiki-trace
  *
  * @author Garret Wilson
  */
@@ -102,9 +102,9 @@ static void update_menu(int highlighted);
 
 // functions concerned with rendering trace screen
 static void show_trace();
-static void show_trace_history(WINDOW* trace_window, int trace_window_start_y);
-static void read_user_input(int page, WINDOW* text_field, int min_row, int min_col, int view_top, int view_left, int view_bot, int view_right, int index);
-static void update_text_field_view(WINDOW* text_field, int min_row, int min_col, int view_top, int view_left, int view_bot, int view_right, int index);
+static void fill_text_fields();
+static void read_user_input(int page, WINDOW* text_field, int min_row, int min_col, int view_top, int view_left, int view_bot, int view_right);
+static void update_text_field(WINDOW* text_field, int min_row, int min_col, int view_top, int view_left, int view_bot, int view_right, int index);
 static void focus_window(WindowProps window_props, bool focus);
 void update_trace_history(TraceHistory history);
 

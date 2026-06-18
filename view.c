@@ -1,5 +1,9 @@
 /**
- * implementations of view.h logic
+ * Implementations of view.h prototypes. Renders a TUI that has 4 different views: launch screen,
+ * trace screen, settings screen, and an about screen.
+ *
+ * In order for the TUI to remain rendered, subsequent work such as fetching data and running
+ * the tracing algorithm are ran through seperate threads.
  *
  * @author Garret Wilson
  */
@@ -36,22 +40,26 @@ InitWindows init_windows;   // launch screen windows
 TraceWindows trace_windows;   // trace screen windows
 AboutWindows about_windows;   // about screen windows
 
+FILE* file;
+
 
 /*
  * Initialize ncurses stdscr window with a welcome, menu, and author acknowledgment.
  */
 void init_view() {
+  file = fopen("output.txt", "w");
+
   clear();
   refresh();
 
   initscr();              // begin curses mode
 
   // ensure terminal window size is of minimal compatible dimensions (85x40)
-  if (LINES < 40 || COLS < 85) {
-    endwin();
-    fprintf(stderr, "Error: terminal window must be at least 85x40 to render wiki-trace\n");
-    exit(1);
-  }
+  /* if (LINES < 40 || COLS < 85) { */
+  /*   endwin(); */
+  /*   fprintf(stderr, "Error: terminal window must be at least 85x40 to render wiki-trace\n"); */
+  /*   exit(1); */
+  /* } */
 
   cbreak();               // allow program interupt signals
   noecho();               // dont show keystrokes pressed by user
@@ -90,7 +98,7 @@ static void show_welcome() {
 
   // print welcome message in the top middle of menu
   wattron(init_windows.welcome_window, A_BOLD | A_UNDERLINE);
-  mvwprintw(init_windows.welcome_window, 2, WELCOME_WIN_WIDTH/2 - strlen(welcome_message)/2, welcome_message);
+  mvwprintw(init_windows.welcome_window, 2, WELCOME_WIN_WIDTH/2 - strlen(welcome_message)/2, "%s", welcome_message);
   wattroff(init_windows.welcome_window, A_BOLD | A_UNDERLINE);
 
   wrefresh(init_windows.welcome_window);
@@ -107,7 +115,7 @@ static void show_author() {
   wbkgd(init_windows.author_window, COLOR_PAIR(1));
 
   wattron(init_windows.author_window, A_BOLD | A_ITALIC); 
-  mvwprintw(init_windows.author_window, 0, AUTHOR_WIN_WIDTH/2 - strlen(author_tag)/2, author_tag);
+  mvwprintw(init_windows.author_window, 0, AUTHOR_WIN_WIDTH/2 - strlen(author_tag)/2, "%s", author_tag);
   wattroff(init_windows.author_window, A_BOLD | A_ITALIC);
 
   wrefresh(init_windows.author_window);
@@ -157,18 +165,21 @@ static void show_menu() {
       delwin(init_windows.author_window);
       delwin(init_windows.welcome_window);
       show_trace();
+      return;
     case OPT_SETTINGS:
       // TODO
-      break;
+      return;
     case OPT_ABOUT:
       delwin(init_windows.menu_window);
       delwin(init_windows.author_window);
       delwin(init_windows.welcome_window);
       show_about();
+      return;
     case OPT_EXIT:
       clear();
       refresh();
       endwin();
+      return;
   }
 }
 
@@ -193,7 +204,7 @@ static void update_menu(int highlighted) {
       wattroff(init_windows.menu_window, A_REVERSE);
     } 
     else {
-      mvwprintw(init_windows.menu_window, y, x, choices[i]);
+      mvwprintw(init_windows.menu_window, y, x, "%s", choices[i]);
     }
 
     y++;    // move down for each choice
@@ -222,7 +233,7 @@ static void show_trace() {
   // window title
   main_window->title = "RUN A TRACE";
   wattron(main_window->window, A_BOLD);
-  mvwprintw(main_window->window, 0, TRACE_WIN_WIDTH/2 - strlen(main_window->title)/2, main_window->title); 
+  mvwprintw(main_window->window, 0, TRACE_WIN_WIDTH/2 - strlen(main_window->title)/2, "%s", main_window->title); 
   wattroff(main_window->window, A_BOLD);
 
   char* header_message1 = "Walk one of the possible paths that exists between the start Wikipedia page and";
@@ -234,7 +245,7 @@ static void show_trace() {
 
   // arrow pointing from start page to destination page
   wattron(main_window->window, A_BOLD);
-  mvwprintw(main_window->window, 6, TRACE_WIN_WIDTH/2 - strlen("======>")/2, "======>");
+  mvwprintw(main_window->window, 6, TRACE_WIN_WIDTH/2 - strlen("======>")/2, "%s", "======>");
   wattroff(main_window->window, A_BOLD);
 
   // inner window for start page (spage)
@@ -245,7 +256,7 @@ static void show_trace() {
 
   spage_window->title = "start_page";
   box(spage_window->window, 0, 0);
-  mvwprintw(spage_window->window, 0, 2, spage_window->title);
+  mvwprintw(spage_window->window, 0, 2, "%s", spage_window->title);
 
   // text field for spage window
   int spage_text_field_y = spage_window_y + 1;
@@ -267,7 +278,7 @@ static void show_trace() {
 
   dpage_window->title = "destination page";
   box(dpage_window->window, 0, 0);
-  mvwprintw(dpage_window->window, 0, 2, dpage_window->title);
+  mvwprintw(dpage_window->window, 0, 2, "%s", dpage_window->title);
 
   // text field for dpage window
   trace_windows.dpage_text_field = newpad(TEXT_FIELD_HEIGHT, TEXT_FIELD_WIDTH);
@@ -289,7 +300,7 @@ static void show_trace() {
 
   hist_window->title = "trace history";
   box(hist_window->window, 0, 0);
-  mvwprintw(hist_window->window, 0, 2, hist_window->title);
+  mvwprintw(hist_window->window, 0, 2, "%s", hist_window->title);
 
   // text field for trace history
   trace_data.history.text_field = newpad(HIST_TEXT_FIELD_HEIGHT, HIST_TEXT_FIELD_WIDTH);
@@ -319,15 +330,18 @@ static void show_trace() {
   int row1 = TRACE_WIN_HEIGHT - 5;
   int row2 = TRACE_WIN_HEIGHT - 3;
 
-  mvwprintw(main_window->window, row1, col_width*0 + col_width/2 - strlen(start)/2, start);
-  mvwprintw(main_window->window, row1, col_width*1 + col_width/2 - strlen(pause)/2, pause);
-  mvwprintw(main_window->window, row1, col_width*2 + col_width/2 - strlen(resume)/2, resume);
-  mvwprintw(main_window->window, row1, col_width*3 + col_width/2 - strlen(stop)/2, stop);
+  mvwprintw(main_window->window, row1, col_width*0 + col_width/2 - strlen(start)/2, "%s", start);
+  mvwprintw(main_window->window, row1, col_width*1 + col_width/2 - strlen(pause)/2, "%s", pause);
+  mvwprintw(main_window->window, row1, col_width*2 + col_width/2 - strlen(resume)/2, "%s", resume);
+  mvwprintw(main_window->window, row1, col_width*3 + col_width/2 - strlen(stop)/2, "%s", stop);
 
-  mvwprintw(main_window->window, row2, col_width*0 + col_width/2 - strlen(change_spage)/2, change_spage);
-  mvwprintw(main_window->window, row2, col_width*1 + col_width/2 - strlen(change_dpage)/2, change_dpage);
-  mvwprintw(main_window->window, row2, col_width*2 + col_width/2 - strlen(back)/2, back);
-  mvwprintw(main_window->window, row2, col_width*3 + col_width/2 - strlen(quit)/2, quit);
+  mvwprintw(main_window->window, row2, col_width*0 + col_width/2 - strlen(change_spage)/2, "%s", change_spage);
+  mvwprintw(main_window->window, row2, col_width*1 + col_width/2 - strlen(change_dpage)/2, "%s", change_dpage);
+  mvwprintw(main_window->window, row2, col_width*2 + col_width/2 - strlen(back)/2, "%s", back);
+  mvwprintw(main_window->window, row2, col_width*3 + col_width/2 - strlen(quit)/2, "%s", quit);
+
+  // fill fields if previously entered
+  fill_text_fields();
 
   // render the trace screen
   wrefresh(main_window->window);
@@ -365,19 +379,13 @@ static void show_trace() {
         break;
       case 'f':
       case 'F':
-        pthread_mutex_lock(&trace_data.lock);
-        index = strlen(trace_data.start_page);
-        pthread_mutex_unlock(&trace_data.lock);
         focus_window(trace_windows.hist_window, false);
-        read_user_input(1, trace_windows.spage_text_field, spage_min_row, spage_min_col, spage_view_top, spage_view_left, spage_view_bot, spage_view_right, index);
+        read_user_input(1, trace_windows.spage_text_field, spage_min_row, spage_min_col, spage_view_top, spage_view_left, spage_view_bot, spage_view_right);
         break;
       case 't':
       case 'T':
-        pthread_mutex_lock(&trace_data.lock);
-        index = strlen(trace_data.dest_page);
-        pthread_mutex_unlock(&trace_data.lock);
         focus_window(trace_windows.hist_window, false);
-        read_user_input(2, trace_windows.dpage_text_field, dpage_min_row, dpage_min_col, dpage_view_top, dpage_view_left, dpage_view_bot, dpage_view_right, index);
+        read_user_input(2, trace_windows.dpage_text_field, dpage_min_row, dpage_min_col, dpage_view_top, dpage_view_left, dpage_view_bot, dpage_view_right);
         break;
       case 'b':
       case 'B':
@@ -389,7 +397,7 @@ static void show_trace() {
         delwin(hist_window->window);
         delwin(history.text_field);
         init_view();
-        break;
+        return;
       case 'q':
       case 'Q':
         delwin(main_window->window);
@@ -411,16 +419,31 @@ static void show_trace() {
 
 
 /*
+ * fill text fields if there is memory for start and destination page
+ */
+static void fill_text_fields() {
+  pthread_mutex_lock(&trace_data.lock);
+  if (strlen(trace_data.start_page)) {
+    wprintw(trace_windows.spage_text_field, "%s", trace_data.start_page);
+  }
+  if (strlen(trace_data.dest_page)) {
+    wprintw(trace_windows.dpage_text_field, "%s", trace_data.dest_page);
+  }
+  pthread_mutex_unlock(&trace_data.lock);
+}
+
+
+/*
  * Sends of a worker to verify the pages provided exist
  */
-void init_trace_verification() {
+static void init_trace_verification() {
   pthread_join(worker, NULL);
 
   // show immediate feedback
   pthread_mutex_lock(&trace_data.lock);
   TraceHistory history = trace_data.history;
   wclear(history.text_field);
-  mvwprintw(history.text_field, 1, 2, "Verifying pages...");
+  mvwprintw(history.text_field, 1, 2, "%s", "Verifying pages...");
   prefresh(history.text_field, history.min_row, history.min_col, history.view_top, history.view_left, history.view_bot, history.view_right);
   pthread_mutex_unlock(&trace_data.lock);
 
@@ -431,28 +454,28 @@ void init_trace_verification() {
 /*
  * Continuously checks struct shared with worker to see if its completed
  */
-void update_trace_verification() {
+static void update_trace_verification() {
   pthread_mutex_lock(&trace_data.lock);
   if (trace_data.status == 1) {    // missing input
     trace_data.status = -1;
     TraceHistory history = trace_data.history;
     wclear(history.text_field);
     char* invalid_msg = "Missing page titles. Please enter two Wikipedia pages.";
-    mvwprintw(history.text_field, 1, 2, invalid_msg);
+    mvwprintw(history.text_field, 1, 2, "%s", invalid_msg);
     prefresh(history.text_field, history.min_row, history.min_col, history.view_top, history.view_left, history.view_bot, history.view_right);
   }
   else if (trace_data.status == 2) {   // cJSON parse error
     trace_data.status = -1;
     TraceHistory history = trace_data.history;
     wclear(history.text_field);
-    mvwprintw(history.text_field, 1, 2, trace_data.err_message);
+    mvwprintw(history.text_field, 1, 2, "%s", trace_data.err_message);
     prefresh(history.text_field, history.min_row, history.min_col, history.view_top, history.view_left, history.view_bot, history.view_right);
   }
   else if (trace_data.status == 3) {   // page doesnt exists
     trace_data.status = -1;
     TraceHistory history = trace_data.history;
     wclear(history.text_field);
-    mvwprintw(history.text_field, 1, 2, trace_data.err_message);
+    mvwprintw(history.text_field, 1, 2, "%s", trace_data.err_message);
     prefresh(history.text_field, history.min_row, history.min_col, history.view_top, history.view_left, history.view_bot, history.view_right);
   }
   else if (trace_data.status == 0) {    // valid pages 
@@ -486,25 +509,30 @@ void update_trace_verification() {
  * @param view_right: location of the right of the window
  * @param index: the current index of the cursor and buffer
  */
-static void read_user_input(int page, WINDOW* text_field, int min_row, int min_col, int view_top, int view_left, int view_bot, int view_right, int index) {
-  curs_set(1);
-  wmove(text_field, 0, index);
+static void read_user_input(int page, WINDOW* text_field, int min_row, int min_col, int view_top, int view_left, int view_bot, int view_right) {
+  keypad(text_field, TRUE);
 
   // change border color to show avtive window
   if (page == 1) { focus_window(trace_windows.spage_window, true); }
-  else { focus_window(trace_windows.dpage_window, true);
-
-  }
-
-  prefresh(text_field, 0, 0, view_top, view_left, view_bot, view_right);
-  keypad(text_field, TRUE);
+  else { focus_window(trace_windows.dpage_window, true); }
 
   // prefill memory if editing populated text field
   char text[256] = {0};
+  int index;
   pthread_mutex_lock(&trace_data.lock);
-  if (page == 1) { strcpy(text, trace_data.start_page); }
-  else { strcpy(text, trace_data.dest_page); }
+  if (page == 1) {
+    strcpy(text, trace_data.start_page);
+    index = strlen(trace_data.start_page);
+  }
+  else {
+    strcpy(text, trace_data.dest_page);
+    index = strlen(trace_data.dest_page);
+  }
   pthread_mutex_unlock(&trace_data.lock);
+
+  curs_set(1);
+  wmove(text_field, 0, index);
+  prefresh(text_field, 0, 0, view_top, view_left, view_bot, view_right);
 
   while(1) {
     int ch = wgetch(text_field);
@@ -514,7 +542,7 @@ static void read_user_input(int page, WINDOW* text_field, int min_row, int min_c
       waddch(text_field, ch);   // add to text field
       text[index] = ch;    // store it
       index++;    // increment cursor and next spot to fill in buffer
-      update_text_field_view(text_field, min_row, min_col, view_top, view_left, view_bot, view_right, index);
+      update_text_field(text_field, min_row, min_col, view_top, view_left, view_bot, view_right, index);
     }
     // deleting chars
     else if ( (ch == KEY_BACKSPACE || ch == 127 || ch == 8) && index >= 0) {
@@ -527,19 +555,19 @@ static void read_user_input(int page, WINDOW* text_field, int min_row, int min_c
       index--;
       mvwaddch(text_field, 0, index, ' ');
       text[index] = '\0';
-      update_text_field_view(text_field, min_row, min_col, view_top, view_left, view_bot, view_right, index);
+      update_text_field(text_field, min_row, min_col, view_top, view_left, view_bot, view_right, index);
     }
     // user pressed enter
     else if (ch == 10) {
       // change window border color
       if (page == 1) {
         focus_window(trace_windows.spage_window, false);
-        update_text_field_view(text_field, min_row, min_col, view_top, view_left, view_bot, view_right, index);
+        update_text_field(text_field, min_row, min_col, view_top, view_left, view_bot, view_right, index);
         curs_set(0);
       }
       else {
         focus_window(trace_windows.dpage_window, false);
-        update_text_field_view(text_field, min_row, min_col, view_top, view_left, view_bot, view_right, index);
+        update_text_field(text_field, min_row, min_col, view_top, view_left, view_bot, view_right, index);
         curs_set(0);
       }
 
@@ -567,7 +595,7 @@ static void read_user_input(int page, WINDOW* text_field, int min_row, int min_c
  * @param view_right: location of the right of the window
  * @param index: the current index of the cursor and buffer
  */
-static void update_text_field_view(WINDOW* text_field, int min_row, int min_col, int view_top, int view_left, int view_bot, int view_right, int index) {
+static void update_text_field(WINDOW* text_field, int min_row, int min_col, int view_top, int view_left, int view_bot, int view_right, int index) {
   int new_min_col;
 
   if (index >= TEXT_WIN_WIDTH - 2) {
@@ -585,25 +613,20 @@ static void update_text_field_view(WINDOW* text_field, int min_row, int min_col,
 /*
  * bring a window into focus by changing its border color
  */
-void focus_window(WindowProps window_props, bool focus) {
+static void focus_window(WindowProps window_props, bool focus) {
   if (focus) {
     wattron(window_props.window, COLOR_PAIR(1));
     box(window_props.window, 0, 0);
-    mvwprintw(window_props.window, 0, 2, window_props.title);
+    mvwprintw(window_props.window, 0, 2, "%s", window_props.title);
     wattroff(window_props.window, COLOR_PAIR(1));
     wrefresh(window_props.window);
   }
   else {
     box(window_props.window, 0, 0);
-    mvwprintw(window_props.window, 0, 2, window_props.title);
+    mvwprintw(window_props.window, 0, 2, "%s", window_props.title);
     wrefresh(window_props.window);
   }
 }
-
-
-/*
- *
- */
 
 
 /*
@@ -643,18 +666,18 @@ static void show_about() {
   // title of window
   about_window->title = "ABOUT";
   wattron(about_window->window, A_BOLD);
-  mvwprintw(about_window->window, 0, ABOUT_WIN_WIDTH/2 - strlen(about_window->title)/2, about_window->title);
+  mvwprintw(about_window->window, 0, ABOUT_WIN_WIDTH/2 - strlen(about_window->title)/2, "%s", about_window->title);
   wattroff(about_window->window, A_BOLD);
 
   // description of window
-  mvwprintw(about_window->window, 1, 3, "Share details about the Wikipedia trace game and how this program works to find");
-  mvwprintw(about_window->window, 2, 3, "potential paths between a starting page to a destination page");
+  mvwprintw(about_window->window, 1, 3, "%s", "Share details about the Wikipedia trace game and how this program works to find");
+  mvwprintw(about_window->window, 2, 3, "%s", "potential paths between a starting page to a destination page");
 
   // actions at the bottom
   char* back = "(b) back";
   char* quit = "(q) quit";
-  mvwprintw(about_window->window, ABOUT_WIN_HEIGHT - 3, ABOUT_WIN_WIDTH/4 - strlen(back)/2, back);
-  mvwprintw(about_window->window, ABOUT_WIN_HEIGHT - 3, ABOUT_WIN_WIDTH/2 + ABOUT_WIN_WIDTH/4 - strlen(quit)/2, quit);
+  mvwprintw(about_window->window, ABOUT_WIN_HEIGHT - 3, ABOUT_WIN_WIDTH/4 - strlen(back)/2, "%s", back);
+  mvwprintw(about_window->window, ABOUT_WIN_HEIGHT - 3, ABOUT_WIN_WIDTH/2 + ABOUT_WIN_WIDTH/4 - strlen(quit)/2, "%s", quit);
 
   // creating a scrollable interior
   about_windows.text_field = newpad(ABOUT_PAD_ROWS, ABOUT_PAD_COLS);
@@ -706,7 +729,11 @@ static void show_about() {
       case 'Q':
         delwin(about_window->window);
         delwin(about_windows.text_field);
+        fprintf(file, "before about window quit\n");
+        fflush(file);
         endwin();
+        fprintf(file, "after about window quit\n");
+        fflush(file);
         return;
     }
 

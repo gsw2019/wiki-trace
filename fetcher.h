@@ -1,5 +1,5 @@
 /**
- * prototypes, structs, and macros for for fetching Wikipedia data
+ * Prototypes, structs, and macros for for fetching Wikipedia data
  *
  * @author Garret Wilson
  */
