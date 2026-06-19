@@ -63,6 +63,9 @@ typedef struct {
   int complete;
   int status;
   char* err_message;
+  int quit_request;
+  int pause_request;
+  int resume_request;
   pthread_mutex_t lock;
 } TraceData;
 
@@ -113,7 +116,8 @@ void update_trace_history(WindowProps* history);
 
 // functions concerened with starting, pausing, or stopping the trace
 static void init_trace_verification();
-static void update_trace_verification();
+static int update_trace_verification();
+static void start_trace();
 
 // functions concerned with rendering settings screen
 static void show_settings();

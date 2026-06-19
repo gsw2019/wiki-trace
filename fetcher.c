@@ -17,6 +17,8 @@ CURL* curl;   // handle used in all fetching/crawling
 
 URLParts url_parts;   // the url pieces needed for requests
 
+PageData page_data;
+
 
 /*
  * initialize curl for the program
@@ -39,7 +41,7 @@ CURL* init_curl() {
 
 /*
  * function used by curl to gather and concate the chunks it returns from the response
- * 
+ *
  * @param ptr:   delivered data
  * @param size:  always 1 (fwrite relic, unused here)
  * @param nmemb: size of delivered data
@@ -68,7 +70,8 @@ void* verify_pages(void* args) {
   TraceData* trace_data = (TraceData *) args;
   // if missing one or both titles, return err value
   pthread_mutex_lock(&trace_data->lock);
-  if (strlen(trace_data->start_page) == 0 || strlen(trace_data->dest_page) == 0) { 
+  if (strlen(trace_data->start_page) == 0 || strlen(trace_data->dest_page) == 0) {
+    trace_data->complete = 1;
     trace_data->status = 1;
     pthread_mutex_unlock(&trace_data->lock);
     return NULL;
@@ -118,6 +121,7 @@ void* verify_pages(void* args) {
 
   if (start_page_status == 2) {
     pthread_mutex_lock(&trace_data->lock);
+    trace_data->complete = 1;
     trace_data->status = 2;
     trace_data->err_message = "Start page parse error. Quit to see error message.";
     pthread_mutex_unlock(&trace_data->lock);
@@ -129,6 +133,7 @@ void* verify_pages(void* args) {
   }
   else if (start_page_status == 3) {
     pthread_mutex_lock(&trace_data->lock);
+    trace_data->complete = 1;
     trace_data->status = 3;
     trace_data->err_message = "Start page does not exists.";
     pthread_mutex_unlock(&trace_data->lock);
@@ -143,6 +148,7 @@ void* verify_pages(void* args) {
 
   if (dest_page_status == 2) {
     pthread_mutex_lock(&trace_data->lock);
+    trace_data->complete = 1;
     trace_data->status = 2;
     trace_data->err_message = "Dest page parse error. Quit to see error message.";
     pthread_mutex_unlock(&trace_data->lock);
@@ -154,6 +160,7 @@ void* verify_pages(void* args) {
   }
   else if (dest_page_status == 3) {
     pthread_mutex_lock(&trace_data->lock);
+    trace_data->complete = 1;
     trace_data->status = 3;
     trace_data->err_message = "Dest page does not exists.";
     pthread_mutex_unlock(&trace_data->lock);
@@ -168,6 +175,7 @@ void* verify_pages(void* args) {
   free(dest_page_resp.data);
 
   pthread_mutex_lock(&trace_data->lock);
+  trace_data->complete = 1;
   trace_data->status = 0;
   pthread_mutex_unlock(&trace_data->lock);
 
@@ -176,7 +184,7 @@ void* verify_pages(void* args) {
 
 
 /*
- * checks response data to see if the Wikipedia page exists
+ * Checks response data to see if the Wikipedia page exists
  *
  * @param page_data: string of json data from response
  * @return 0: page exists
@@ -208,3 +216,27 @@ static int check_page_exists(char* page_data) {
   return 0;
 }
 
+
+/*
+ * Begins running the trace by fetching current pages links and intro, and the
+ * destination pages content
+ */
+void* run_trace(void* args) {
+  TraceData* trace_data = (TraceData*) args;
+  int complete = 0;
+
+  return NULL;
+
+  // while destination page not found
+  while (complete == 0) {
+
+
+
+    pthread_mutex_lock(&trace_data->lock);
+    complete = trace_data->complete;
+    pthread_mutex_unlock(&trace_data->lock);
+
+  }
+
+  return NULL;
+}

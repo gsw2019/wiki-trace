@@ -32,6 +32,8 @@ TraceData trace_data = {   // shared data struct for view and all else
   .start_page = {0},
   .dest_page = {0},
   .currnt_page = {0},
+  .hops = 0,
+  .complete = 0,
   .status = -1,
   .lock = PTHREAD_MUTEX_INITIALIZER
 };
@@ -343,16 +345,25 @@ static void show_trace() {
   wrefresh(spage_window->window);
   wrefresh(dpage_window->window);
   wrefresh(hist_window->window);
-  prefresh(spage_text_field->window, spage_text_field->min_row, spage_text_field->min_col, spage_text_field->view_top, spage_text_field->view_left, spage_text_field->view_bot, spage_text_field->view_right);
-  prefresh(dpage_text_field->window, dpage_text_field->min_row, dpage_text_field->min_col, dpage_text_field->view_top, dpage_text_field->view_left, dpage_text_field->view_bot, dpage_text_field->view_right);
-  prefresh(hist_text_field->window, hist_text_field->min_row, hist_text_field->min_col, hist_text_field->view_top, hist_text_field->view_left, hist_text_field->view_bot, hist_text_field->view_right);
+  prefresh(spage_text_field->window,
+           spage_text_field->min_row, spage_text_field->min_col,
+           spage_text_field->view_top, spage_text_field->view_left,
+           spage_text_field->view_bot, spage_text_field->view_right);
+  prefresh(dpage_text_field->window,
+           dpage_text_field->min_row, dpage_text_field->min_col,
+           dpage_text_field->view_top, dpage_text_field->view_left,
+           dpage_text_field->view_bot, dpage_text_field->view_right);
+  prefresh(hist_text_field->window,
+           hist_text_field->min_row, hist_text_field->min_col,
+           hist_text_field->view_top, hist_text_field->view_left,
+           hist_text_field->view_bot, hist_text_field->view_right);
 
   // handle actions via key presses
   keypad(main_window->window, TRUE);
   wtimeout(main_window->window, 100);   // errors out wgetch after 100 ms, falls to defualt
   while (1) {
     int ch = wgetch(main_window->window);
-    int index;
+    int index, verified;
 
     switch(ch) {
       case 's':
@@ -408,13 +419,23 @@ static void show_trace() {
         break;
     }
 
-    update_trace_verification();    // checks every 100ms to see if worker finished
+    // checks every 100ms to see if worker finished
+    pthread_mutex_lock(&trace_data.lock);
+    if (trace_data.complete == 1) {
+      trace_data.complete = 0;
+      verified = update_trace_verification();
+    }
+    pthread_mutex_unlock(&trace_data.lock);
+
+    // runs if pages are verified
+    if (verified == 0) { start_trace(); }
+
   }
 }
 
 
 /*
- * fill text fields if there is memory for start and destination page
+ * Fill text fields if there is memory for start and destination page.
  */
 static void fill_text_fields() {
   pthread_mutex_lock(&trace_data.lock);
@@ -429,7 +450,7 @@ static void fill_text_fields() {
 
 
 /*
- * Sends of a worker to verify the pages provided exist
+ * Sends of a worker to verify the pages provided exist.
  */
 static void init_trace_verification() {
   pthread_join(worker, NULL);
@@ -439,7 +460,10 @@ static void init_trace_verification() {
   WindowProps* history = &trace_data.history;
   wclear(history->window);
   mvwprintw(history->window, 1, 2, "%s", "Verifying pages...");
-  prefresh(history->window, history->min_row, history->min_col, history->view_top, history->view_left, history->view_bot, history->view_right);
+  prefresh(history->window,
+           history->min_row, history->min_col,
+           history->view_top, history->view_left,
+           history->view_bot, history->view_right);
   pthread_mutex_unlock(&trace_data.lock);
 
   pthread_create(&worker, NULL, verify_pages, &trace_data);
@@ -447,63 +471,92 @@ static void init_trace_verification() {
 
 
 /*
- * Continuously checks struct shared with worker to see if its completed
+ * Continuously checks struct shared with worker to see if its completed.
  */
-static void update_trace_verification() {
-  pthread_mutex_lock(&trace_data.lock);
+static int update_trace_verification() {
   if (trace_data.status == 1) {    // missing input
     trace_data.status = -1;
     WindowProps* history = &trace_data.history;
     wclear(history->window);
     char* invalid_msg = "Missing page titles. Please enter two Wikipedia pages.";
     mvwprintw(history->window, 1, 2, "%s", invalid_msg);
-    prefresh(history->window, history->min_row, history->min_col, history->view_top, history->view_left, history->view_bot, history->view_right);
+    prefresh(history->window,
+             history->min_row, history->min_col,
+             history->view_top, history->view_left,
+             history->view_bot, history->view_right);
+    return 1;
   }
   else if (trace_data.status == 2) {   // cJSON parse error
     trace_data.status = -1;
     WindowProps* history = &trace_data.history;
     wclear(history->window);
     mvwprintw(history->window, 1, 2, "%s", trace_data.err_message);
-    prefresh(history->window, history->min_row, history->min_col, history->view_top, history->view_left, history->view_bot, history->view_right);
+    prefresh(history->window,
+             history->min_row, history->min_col,
+             history->view_top, history->view_left,
+             history->view_bot, history->view_right);
+    return 1;
   }
   else if (trace_data.status == 3) {   // page doesnt exists
     trace_data.status = -1;
     WindowProps* history = &trace_data.history;
     wclear(history->window);
     mvwprintw(history->window, 1, 2, "%s", trace_data.err_message);
-    prefresh(history->window, history->min_row, history->min_col, history->view_top, history->view_left, history->view_bot, history->view_right);
+    prefresh(history->window,
+             history->min_row, history->min_col,
+             history->view_top, history->view_left,
+             history->view_bot, history->view_right);
+    return 1;
   }
-  else if (trace_data.status == 0) {    // valid pages 
-    trace_data.status = -1;
-    WindowProps* history = &trace_data.history;
-    wclear(history->window);
-    
-    mvwprintw(history->window, 1, 2, "%s", "pages valid");
-    // TODO
 
-    /* endwin(); */
-    /* printf("verified start page: %s\n", trace_data.start_page); */
-    /* printf("verified dest page: %s\n", trace_data.dest_page); */ 
-    /* exit(0); */
+  trace_data.status = -1;
+  WindowProps* history = &trace_data.history;
+  wclear(history->window);
 
-    prefresh(history->window, history->min_row, history->min_col, history->view_top, history->view_left, history->view_bot, history->view_right);
-  }
-  pthread_mutex_unlock(&trace_data.lock);
+  mvwprintw(history->window, 1, 2, "%s", "pages valid");
+  // TODO
+
+  /* endwin(); */
+  /* printf("verified start page: %s\n", trace_data.start_page); */
+  /* printf("verified dest page: %s\n", trace_data.dest_page); */
+  /* exit(0); */
+
+  prefresh(history->window,
+           history->min_row, history->min_col,
+           history->view_top, history->view_left,
+           history->view_bot, history->view_right);
+
+  return 0;
 }
 
 
 /*
+ * Sends of a worker to begin the trace
+ */
+static void start_trace() {
+  pthread_join(worker, NULL);
+
+  // print immediate feeback
+   pthread_mutex_lock(&trace_data.lock);
+  WindowProps* history = &trace_data.history;
+  wclear(history->window);
+  mvwprintw(history->window, 1, 2, "%s", "Starting trace...");
+  prefresh(history->window,
+           history->min_row, history->min_col,
+           history->view_top, history->view_left,
+           history->view_bot, history->view_right);
+  pthread_mutex_unlock(&trace_data.lock);
+
+  pthread_create(&worker, NULL, run_trace, &trace_data);
+}
+
+
+
+/*
  * Read chars entered into the start page text field or the destination page text field.
- * 
+ *
  * @param page: a flag to know which text field is being written to (1 = spage, 2 = dpage)
- * @param text_field: the window to display and read text from
- * @param min_row: the starting row displayed in the window
- * @param min_col: the staring column displyed in the window
- * @param view_top: location of the top of the window
- * @param view_left: location of the left of the window
- * @param view_bot: location of the bottom of the window
- * @param view_right: location of the right of the window
- * @param index: the current index of the cursor and buffer
+ * @param text_field: the window data needed to display and read text from
  */
 static void read_user_input(int page, WindowProps* text_field) {
   keypad(text_field->window, TRUE);
@@ -582,13 +635,7 @@ static void read_user_input(int page, WindowProps* text_field) {
 /*
  * Updates the text field view when user types in the start page or destination page text field
  *
- * @param text_field: the window to display and read text from
- * @param min_row: the starting row displayed in the window
- * @param min_col: the staring column displyed in the window
- * @param view_top: location of the top of the window
- * @param view_left: location of the left of the window
- * @param view_bot: location of the bottom of the window
- * @param view_right: location of the right of the window
+ * @param text_field: the window data needed to display and read text from
  * @param index: the current index of the cursor and buffer
  */
 static void update_text_field(WindowProps* text_field, int index) {

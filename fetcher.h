@@ -18,16 +18,16 @@ typedef struct {
   char* intro_end;
 } URLParts;
 
-
 typedef struct {
   char *data;
   size_t size;
 } Response;
 
 typedef struct {
-  int status;
-  char* message;
-} VerificationData;
+  char* title;
+  char* intro;
+  char* links;
+} PageData;
 
 
 // init or utility funcs
@@ -37,4 +37,7 @@ static size_t write_callback(void *ptr, size_t size, size_t nmemb, Response *res
 // verifying pages input by user
 void* verify_pages(void* args);
 static int check_page_exists(char* page_data);
+
+// starting up the trace
+void* run_trace(void* args);
 
