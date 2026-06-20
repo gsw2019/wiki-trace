@@ -60,7 +60,8 @@ typedef struct {
   char currnt_page[256];
   WindowProps history;
   int hops;
-  int complete;
+  int init_complete;
+  int trace_complete;
   int status;
   char* err_message;
   int quit_request;
@@ -116,7 +117,7 @@ void update_trace_history(WindowProps* history);
 
 // functions concerened with starting, pausing, or stopping the trace
 static void init_trace_verification();
-static int update_trace_verification();
+static int peek_worker_status();
 static void start_trace();
 
 // functions concerned with rendering settings screen

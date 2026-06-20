@@ -33,8 +33,9 @@ TraceData trace_data = {   // shared data struct for view and all else
   .dest_page = {0},
   .currnt_page = {0},
   .hops = 0,
-  .complete = 0,
-  .status = -1,
+  .init_complete = 0,
+  .trace_complete = 0,
+  .status = 0,
   .lock = PTHREAD_MUTEX_INITIALIZER
 };
 
@@ -363,7 +364,7 @@ static void show_trace() {
   wtimeout(main_window->window, 100);   // errors out wgetch after 100 ms, falls to defualt
   while (1) {
     int ch = wgetch(main_window->window);
-    int index, verified;
+    int index, pages_verified, trace_status;
 
     switch(ch) {
       case 's':
@@ -419,16 +420,24 @@ static void show_trace() {
         break;
     }
 
-    // checks every 100ms to see if worker finished
+    // checks every 100ms to see if verification worker finished
     pthread_mutex_lock(&trace_data.lock);
-    if (trace_data.complete == 1) {
-      trace_data.complete = 0;
-      verified = update_trace_verification();
+    if (trace_data.init_complete == 1) {
+      trace_data.init_complete = 0;
+      if (peek_worker_status() == 0) {
+        pthread_mutex_unlock(&trace_data.lock);
+        start_trace();
+      }
     }
     pthread_mutex_unlock(&trace_data.lock);
 
-    // runs if pages are verified
-    if (verified == 0) { start_trace(); }
+    // checks every 100ms to see if trace worker finished
+    pthread_mutex_lock(&trace_data.lock);
+    if (trace_data.trace_complete == 1) {
+      trace_data.trace_complete = 0;
+      peek_worker_status();
+    }
+    pthread_mutex_unlock(&trace_data.lock);
 
   }
 }
@@ -466,28 +475,17 @@ static void init_trace_verification() {
            history->view_bot, history->view_right);
   pthread_mutex_unlock(&trace_data.lock);
 
-  pthread_create(&worker, NULL, verify_pages, &trace_data);
+  pthread_create(&worker, NULL, verify_pages, NULL);
 }
 
 
 /*
- * Continuously checks struct shared with worker to see if its completed.
+ * Continuously checks struct shared with worker to see if its completed. Wrapped in
+ * mutex where it is called.
  */
-static int update_trace_verification() {
-  if (trace_data.status == 1) {    // missing input
-    trace_data.status = -1;
-    WindowProps* history = &trace_data.history;
-    wclear(history->window);
-    char* invalid_msg = "Missing page titles. Please enter two Wikipedia pages.";
-    mvwprintw(history->window, 1, 2, "%s", invalid_msg);
-    prefresh(history->window,
-             history->min_row, history->min_col,
-             history->view_top, history->view_left,
-             history->view_bot, history->view_right);
-    return 1;
-  }
-  else if (trace_data.status == 2) {   // cJSON parse error
-    trace_data.status = -1;
+static int peek_worker_status() {
+  if (trace_data.status == ERROR_INPUT) {    // missing input
+    trace_data.status = 0;
     WindowProps* history = &trace_data.history;
     wclear(history->window);
     mvwprintw(history->window, 1, 2, "%s", trace_data.err_message);
@@ -497,8 +495,30 @@ static int update_trace_verification() {
              history->view_bot, history->view_right);
     return 1;
   }
-  else if (trace_data.status == 3) {   // page doesnt exists
-    trace_data.status = -1;
+  else if (trace_data.status == ERROR_MEM) {    // error with malloc
+    trace_data.status = 0;
+    WindowProps* history = &trace_data.history;
+    wclear(history->window);
+    mvwprintw(history->window, 1, 2, "%s", trace_data.err_message);
+    prefresh(history->window,
+             history->min_row, history->min_col,
+             history->view_top, history->view_left,
+             history->view_bot, history->view_right);
+    return 1;
+  }
+  else if (trace_data.status == ERROR_PARSE) {   // cJSON parse error
+    trace_data.status = 0;
+    WindowProps* history = &trace_data.history;
+    wclear(history->window);
+    mvwprintw(history->window, 1, 2, "%s", trace_data.err_message);
+    prefresh(history->window,
+             history->min_row, history->min_col,
+             history->view_top, history->view_left,
+             history->view_bot, history->view_right);
+    return 1;
+  }
+  else if (trace_data.status == ERROR_EXISTENCE) {   // page doesnt exists
+    trace_data.status = 0;
     WindowProps* history = &trace_data.history;
     wclear(history->window);
     mvwprintw(history->window, 1, 2, "%s", trace_data.err_message);
@@ -509,11 +529,11 @@ static int update_trace_verification() {
     return 1;
   }
 
-  trace_data.status = -1;
-  WindowProps* history = &trace_data.history;
-  wclear(history->window);
-
-  mvwprintw(history->window, 1, 2, "%s", "pages valid");
+  /* trace_data.status = 0; */
+  /* WindowProps* history = &trace_data.history; */
+  /* wclear(history->window); */
+  /**/
+  /* mvwprintw(history->window, 1, 2, "%s", "pages valid"); */
   // TODO
 
   /* endwin(); */
@@ -521,11 +541,11 @@ static int update_trace_verification() {
   /* printf("verified dest page: %s\n", trace_data.dest_page); */
   /* exit(0); */
 
-  prefresh(history->window,
-           history->min_row, history->min_col,
-           history->view_top, history->view_left,
-           history->view_bot, history->view_right);
-
+  /* prefresh(history->window, */
+  /*          history->min_row, history->min_col, */
+  /*          history->view_top, history->view_left, */
+  /*          history->view_bot, history->view_right); */
+  /**/
   return 0;
 }
 
@@ -537,7 +557,7 @@ static void start_trace() {
   pthread_join(worker, NULL);
 
   // print immediate feeback
-   pthread_mutex_lock(&trace_data.lock);
+  pthread_mutex_lock(&trace_data.lock);
   WindowProps* history = &trace_data.history;
   wclear(history->window);
   mvwprintw(history->window, 1, 2, "%s", "Starting trace...");
@@ -545,9 +565,10 @@ static void start_trace() {
            history->min_row, history->min_col,
            history->view_top, history->view_left,
            history->view_bot, history->view_right);
+
   pthread_mutex_unlock(&trace_data.lock);
 
-  pthread_create(&worker, NULL, run_trace, &trace_data);
+  pthread_create(&worker, NULL, run_trace, NULL);
 }
 
 
