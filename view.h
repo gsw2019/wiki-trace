@@ -5,12 +5,12 @@
  */
 
 
-#include <ncurses.h>
-#include <pthread.h>
-
-
 #ifndef VIEW_H
 #define VIEW_H
+
+
+#include <ncurses.h>
+#include <pthread.h>
 
 
 #define WELCOME_WIN_HEIGHT     5

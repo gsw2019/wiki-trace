@@ -5,4 +5,17 @@
  */
 
 
+#ifndef TRACER_H
+#define TRACER_H
 
+
+#include "fetcher.h"
+
+
+void set_dest_page(PageData* dest_page);
+void evaluate_page(PageData* page_data);
+void score_intros(PageData* page_data);
+char* get_next_page();
+
+
+#endif

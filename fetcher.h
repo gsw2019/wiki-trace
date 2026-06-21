@@ -5,6 +5,10 @@
  */
 
 
+#ifndef FETCHER_H
+#define FETCHER_H
+
+
 #include <curl/curl.h>
 
 #include "view.h"
@@ -18,7 +22,7 @@
 #define ERROR_PARSE          3
 #define ERROR_EXISTENCE      4
 
-#define INIT_LINK_ARRAY_SIZE 2
+#define INIT_DATA_ARRAY_SIZE 2
 
 
 typedef struct {
@@ -30,6 +34,8 @@ typedef struct {
   char* links_cont_mid;
   char* intro_start;
   char* intro_end;
+  char* content_start;
+  char* content_end;
 } URLParts;
 
 typedef struct {
@@ -42,6 +48,7 @@ typedef struct {
   char* intro;
   char* content;
   char** links;
+  int links_count;
 } PageData;
 
 
@@ -56,9 +63,13 @@ static size_t write_callback(void *ptr, size_t size, size_t nmemb, Response *res
 void* verify_pages(void* args);
 static int check_page_exists(char* page_data);
 
-// starting up the trace
+// performing the trace
 void* run_trace(void* args);
-static void get_page_links(char* page_title);
-static void get_page_content(TraceData* trace_data);
+static void get_page_links(char* page_title, PageData* page_data);
+static void get_page_content(char* page_title, PageData* page_data);
 static void parse_links(cJSON* json_data, PageData* page_data);
+static void get_links_intros(PageData* page_data);
+static void free_page_data(PageData* page_data);
 
+
+#endif
