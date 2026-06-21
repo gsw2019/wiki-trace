@@ -27,7 +27,7 @@ FILE* file;
  * @return a handle to curl object
  */
 CURL* init_curl() {
-  /* file = fopen("output.txt", "w"); */
+  file = fopen("output.txt", "w");
 
   curl = curl_easy_init();
   curl_easy_setopt(curl, CURLOPT_USERAGENT, "wiki-trace project (wsg2026@outlook.com)");
@@ -131,15 +131,6 @@ void* verify_pages(void* args) {
   curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
   curl_easy_setopt(curl, CURLOPT_WRITEDATA, &dest_page_resp);
   curl_easy_perform(curl);
-
-  /* printf("start url: %s\n", url_start_page); */
-  /* printf("\n"); */
-  /* printf("dest url: %s\n", url_dest_page); */
-  /**/
-  /* printf("%s\n", start_page_resp.data); */
-  /* printf("\n\n"); */
-  /* printf("%s\n", dest_page_resp.data); */
-  /**/
 
   int start_page_status = check_page_exists(start_page_resp.data);
 
@@ -250,8 +241,8 @@ static int check_page_exists(char* page_data) {
  */
 void* run_trace(void* args) {
   pthread_mutex_lock(&trace_data.lock);
-  char* start_page_title = trace_data.start_page;
-  char* dest_page_title = trace_data.dest_page;
+  char* start_page_title = strdup(trace_data.start_page);
+  char* dest_page_title = strdup(trace_data.dest_page);
   trace_data.pages_traveled = malloc(INIT_DATA_ARRAY_SIZE * sizeof(char*));
   pthread_mutex_unlock(&trace_data.lock);
 
@@ -372,10 +363,12 @@ static void get_page_links(char* page_title, PageData* page_data) {
   parse_links(json_data, page_data);
 
   // leave if encountered errors
+  int err;
   pthread_mutex_lock(&trace_data.lock);
-  if (trace_data.status != 0) { return; }
+  err = trace_data.status;
   pthread_mutex_unlock(&trace_data.lock);
-  
+  if (err != 0) { return; }
+
   // check if has continue flag
   if (cJSON_GetObjectItem(json_data, "continue") != NULL) {
 
@@ -423,6 +416,13 @@ static void get_page_links(char* page_title, PageData* page_data) {
 
       // extract links
       parse_links(json_data, page_data);
+
+      // leave if encountered errors
+      int err;
+      pthread_mutex_lock(&trace_data.lock);
+      err = trace_data.status;
+      pthread_mutex_unlock(&trace_data.lock);
+      if (err != 0) { return; }
 
       // check if has continue flag
       cont = cJSON_GetObjectItem(json_data, "continue");
@@ -488,6 +488,8 @@ static void parse_links(cJSON* json_data, PageData* page_data) {
 
     // copy string into allocated mem
     strcpy(page_data->links[count], link->valuestring);
+
+    /* fprintf(file, "%s\n", link->valuestring); */
 
     count++;
   }

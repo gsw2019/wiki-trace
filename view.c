@@ -13,6 +13,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <time.h>
 
 #include "view.h"
 #include "fetcher.h"
@@ -28,7 +29,7 @@ char* choices[] = {   // menu choices
 int n_choices = sizeof(choices) / sizeof(char*);
 
 pthread_t worker;   // worker thread for all none view stuff
-TraceData trace_data = {   // shared data struct for view and all else
+TraceData trace_data = {   // shared data struct for view, fetcher, and tracer
   .start_page = {0},
   .dest_page = {0},
   .hops = 0,
@@ -37,6 +38,8 @@ TraceData trace_data = {   // shared data struct for view and all else
   .status = 0,
   .lock = PTHREAD_MUTEX_INITIALIZER
 };
+
+time_t start_message_delay = 0;
 
 InitWindows init_windows;   // launch screen windows
 TraceWindows trace_windows;   // trace screen windows
@@ -305,6 +308,8 @@ static void show_trace() {
   hist_text_field->view_left = hist_start_x + 2;
   hist_text_field->view_bot = hist_start_y + HIST_WIN_HEIGHT - 2;
   hist_text_field->view_right = hist_start_x + HIST_WIN_WIDTH - 2;
+  hist_text_field->write_row = 1;
+  hist_text_field->write_col = 2;
 
   for (int i = 0; i < HIST_TEXT_FIELD_HEIGHT; i++) {
     mvwprintw(hist_text_field->window, i, 1, "this is entry #%d", i);
@@ -355,13 +360,12 @@ static void show_trace() {
            hist_text_field->view_top, hist_text_field->view_left,
            hist_text_field->view_bot, hist_text_field->view_right);
 
-  // handle actions via key presses
-  keypad(main_window->window, TRUE);
+  keypad(main_window->window, TRUE);    // handle actions via key presses
   wtimeout(main_window->window, 100);   // errors out wgetch after 100 ms, falls to defualt
+  int prev_hops = 0;
+
   while (1) {
     int ch = wgetch(main_window->window);
-    int prev_hops = 0;
-    int index, pages_verified, trace_status;
 
     switch(ch) {
       case 's':
@@ -423,10 +427,17 @@ static void show_trace() {
       trace_data.init_complete = 0;
       if (peek_worker_status() == 0) {
         pthread_mutex_unlock(&trace_data.lock);
-        start_trace();
+        show_start_message();
+        continue;
       }
     }
     pthread_mutex_unlock(&trace_data.lock);
+
+    // 2 seconds after shwoing start message begin the trace
+    if ((start_message_delay != 0) && (time(NULL) - start_message_delay >= 2)) {
+      start_message_delay = 0;
+      start_trace();
+    }
 
     // checks every 100ms to see if trace worker finished
     pthread_mutex_lock(&trace_data.lock);
@@ -440,6 +451,8 @@ static void show_trace() {
     pthread_mutex_lock(&trace_data.lock);
     if (trace_data.hops > prev_hops) {
       // go through prev_hops + 1 to hops
+      // print them
+      // update prev_hops
     }
     pthread_mutex_unlock(&trace_data.lock);
   }
@@ -470,12 +483,11 @@ static void init_trace_verification() {
   // show immediate feedback
   WindowProps* history = &trace_windows.hist_text_field;
   wclear(history->window);
-  mvwprintw(history->window, 1, 2, "%s", "Verifying pages...");
+  mvwprintw(history->window, history->write_row, history->write_col, "%s", "Verifying pages...");
   prefresh(history->window,
            history->min_row, history->min_col,
            history->view_top, history->view_left,
            history->view_bot, history->view_right);
-  pthread_mutex_unlock(&trace_data.lock);
 
   pthread_create(&worker, NULL, verify_pages, NULL);
 }
@@ -490,7 +502,7 @@ static int peek_worker_status() {
     trace_data.status = 0;
     WindowProps* history = &trace_windows.hist_text_field;
     wclear(history->window);
-    mvwprintw(history->window, 1, 2, "%s", trace_data.err_message);
+    mvwprintw(history->window, history->write_row, history->write_col, "%s", trace_data.err_message);
     prefresh(history->window,
              history->min_row, history->min_col,
              history->view_top, history->view_left,
@@ -501,7 +513,7 @@ static int peek_worker_status() {
     trace_data.status = 0;
     WindowProps* history = &trace_windows.hist_text_field;
     wclear(history->window);
-    mvwprintw(history->window, 1, 2, "%s", trace_data.err_message);
+    mvwprintw(history->window, history->write_row, history->write_col, "%s", trace_data.err_message);
     prefresh(history->window,
              history->min_row, history->min_col,
              history->view_top, history->view_left,
@@ -512,7 +524,7 @@ static int peek_worker_status() {
     trace_data.status = 0;
     WindowProps* history = &trace_windows.hist_text_field;
     wclear(history->window);
-    mvwprintw(history->window, 1, 2, "%s", trace_data.err_message);
+    mvwprintw(history->window, history->write_row, history->write_col, "%s", trace_data.err_message);
     prefresh(history->window,
              history->min_row, history->min_col,
              history->view_top, history->view_left,
@@ -523,7 +535,7 @@ static int peek_worker_status() {
     trace_data.status = 0;
     WindowProps* history = &trace_windows.hist_text_field;
     wclear(history->window);
-    mvwprintw(history->window, 1, 2, "%s", trace_data.err_message);
+    mvwprintw(history->window, history->write_row, history->write_col, "%s", trace_data.err_message);
     prefresh(history->window,
              history->min_row, history->min_col,
              history->view_top, history->view_left,
@@ -531,46 +543,48 @@ static int peek_worker_status() {
     return 1;
   }
 
-  /* trace_data.status = 0; */
-  /* WindowProps* history = &trace_data.history; */
-  /* wclear(history->window); */
-  /**/
-  /* mvwprintw(history->window, 1, 2, "%s", "pages valid"); */
-  // TODO
-
-  /* endwin(); */
-  /* printf("verified start page: %s\n", trace_data.start_page); */
-  /* printf("verified dest page: %s\n", trace_data.dest_page); */
-  /* exit(0); */
-
-  /* prefresh(history->window, */
-  /*          history->min_row, history->min_col, */
-  /*          history->view_top, history->view_left, */
-  /*          history->view_bot, history->view_right); */
-  /**/
   return 0;
 }
 
 
 /*
- * Sends of a worker to begin the trace
+ * displays a starting message and starts timer to launch trace
  */
-static void start_trace() {
-  pthread_join(worker, NULL);
-
-  // print immediate feeback
+static void show_start_message() {
+  // write message trace is starting
   WindowProps* history = &trace_windows.hist_text_field;
   wclear(history->window);
-  mvwprintw(history->window, 1, 2, "%s", "Starting trace...");
+  mvwprintw(history->window, history->write_row, history->write_col, "%s", "Starting trace...");
   prefresh(history->window,
            history->min_row, history->min_col,
            history->view_top, history->view_left,
            history->view_bot, history->view_right);
 
+  // initialze timer
+  start_message_delay = time(NULL);
+}
+
+
+/*
+ * Sends off a worker to begin the trace and prints starting page
+ */
+static void start_trace() {
+  pthread_join(worker, NULL);
+
+  pthread_mutex_lock(&trace_data.lock);
+  char* start_page = strdup(trace_data.start_page);
+  pthread_mutex_unlock(&trace_data.lock);
+
+  WindowProps* history = &trace_windows.hist_text_field;
+  wclear(history->window);
+  mvwprintw(history->window, history->write_row, history->write_col, "%s", start_page);
+  prefresh(history->window,
+           history->min_row, history->min_col,
+           history->view_top, history->view_left,
+           history->view_bot, history->view_right);
 
   pthread_create(&worker, NULL, run_trace, NULL);
 }
-
 
 
 /*
@@ -679,7 +693,7 @@ static void update_text_field(WindowProps* text_field, int index) {
  */
 static void focus_window(WindowProps* window_props, bool focus) {
   // color to draw active window borders
-  init_pair(1, COLOR_CYAN, COLOR_BLACK);
+  init_pair(1, COLOR_CYAN, -1);
 
   if (focus) {
     wattron(window_props->window, COLOR_PAIR(1));

@@ -51,6 +51,8 @@ typedef struct {
   int view_left;
   int view_bot;
   int view_right;
+  int write_row;
+  int write_col;
 } WindowProps;
 
 // carries info over threads
@@ -117,6 +119,7 @@ void update_trace_history(WindowProps* history);
 // functions concerened with starting, pausing, or stopping the trace
 static void init_trace_verification();
 static int peek_worker_status();
+static void show_start_message();
 static void start_trace();
 
 // functions concerned with rendering settings screen
