@@ -31,7 +31,6 @@ pthread_t worker;   // worker thread for all none view stuff
 TraceData trace_data = {   // shared data struct for view and all else
   .start_page = {0},
   .dest_page = {0},
-  .currnt_page = {0},
   .hops = 0,
   .init_complete = 0,
   .trace_complete = 0,
@@ -307,9 +306,6 @@ static void show_trace() {
   hist_text_field->view_bot = hist_start_y + HIST_WIN_HEIGHT - 2;
   hist_text_field->view_right = hist_start_x + HIST_WIN_WIDTH - 2;
 
-  // make sure trace data struct has history text field info
-  trace_data.history = trace_windows.hist_text_field;
-
   for (int i = 0; i < HIST_TEXT_FIELD_HEIGHT; i++) {
     mvwprintw(hist_text_field->window, i, 1, "this is entry #%d", i);
   }
@@ -364,6 +360,7 @@ static void show_trace() {
   wtimeout(main_window->window, 100);   // errors out wgetch after 100 ms, falls to defualt
   while (1) {
     int ch = wgetch(main_window->window);
+    int prev_hops = 0;
     int index, pages_verified, trace_status;
 
     switch(ch) {
@@ -439,6 +436,12 @@ static void show_trace() {
     }
     pthread_mutex_unlock(&trace_data.lock);
 
+    // checks every 100ms to see if can update trace history
+    pthread_mutex_lock(&trace_data.lock);
+    if (trace_data.hops > prev_hops) {
+      // go through prev_hops + 1 to hops
+    }
+    pthread_mutex_unlock(&trace_data.lock);
   }
 }
 
@@ -465,8 +468,7 @@ static void init_trace_verification() {
   pthread_join(worker, NULL);
 
   // show immediate feedback
-  pthread_mutex_lock(&trace_data.lock);
-  WindowProps* history = &trace_data.history;
+  WindowProps* history = &trace_windows.hist_text_field;
   wclear(history->window);
   mvwprintw(history->window, 1, 2, "%s", "Verifying pages...");
   prefresh(history->window,
@@ -486,7 +488,7 @@ static void init_trace_verification() {
 static int peek_worker_status() {
   if (trace_data.status == ERROR_INPUT) {    // missing input
     trace_data.status = 0;
-    WindowProps* history = &trace_data.history;
+    WindowProps* history = &trace_windows.hist_text_field;
     wclear(history->window);
     mvwprintw(history->window, 1, 2, "%s", trace_data.err_message);
     prefresh(history->window,
@@ -497,7 +499,7 @@ static int peek_worker_status() {
   }
   else if (trace_data.status == ERROR_MEM) {    // error with malloc
     trace_data.status = 0;
-    WindowProps* history = &trace_data.history;
+    WindowProps* history = &trace_windows.hist_text_field;
     wclear(history->window);
     mvwprintw(history->window, 1, 2, "%s", trace_data.err_message);
     prefresh(history->window,
@@ -508,7 +510,7 @@ static int peek_worker_status() {
   }
   else if (trace_data.status == ERROR_PARSE) {   // cJSON parse error
     trace_data.status = 0;
-    WindowProps* history = &trace_data.history;
+    WindowProps* history = &trace_windows.hist_text_field;
     wclear(history->window);
     mvwprintw(history->window, 1, 2, "%s", trace_data.err_message);
     prefresh(history->window,
@@ -519,7 +521,7 @@ static int peek_worker_status() {
   }
   else if (trace_data.status == ERROR_EXISTENCE) {   // page doesnt exists
     trace_data.status = 0;
-    WindowProps* history = &trace_data.history;
+    WindowProps* history = &trace_windows.hist_text_field;
     wclear(history->window);
     mvwprintw(history->window, 1, 2, "%s", trace_data.err_message);
     prefresh(history->window,
@@ -557,8 +559,7 @@ static void start_trace() {
   pthread_join(worker, NULL);
 
   // print immediate feeback
-  pthread_mutex_lock(&trace_data.lock);
-  WindowProps* history = &trace_data.history;
+  WindowProps* history = &trace_windows.hist_text_field;
   wclear(history->window);
   mvwprintw(history->window, 1, 2, "%s", "Starting trace...");
   prefresh(history->window,
@@ -566,7 +567,6 @@ static void start_trace() {
            history->view_top, history->view_left,
            history->view_bot, history->view_right);
 
-  pthread_mutex_unlock(&trace_data.lock);
 
   pthread_create(&worker, NULL, run_trace, NULL);
 }

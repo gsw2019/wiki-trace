@@ -57,8 +57,7 @@ typedef struct {
 typedef struct {
   char start_page[256];
   char dest_page[256];
-  char currnt_page[256];
-  WindowProps history;
+  char** pages_traveled;
   int hops;
   int init_complete;
   int trace_complete;

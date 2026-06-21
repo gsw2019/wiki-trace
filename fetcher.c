@@ -252,6 +252,7 @@ void* run_trace(void* args) {
   pthread_mutex_lock(&trace_data.lock);
   char* start_page_title = trace_data.start_page;
   char* dest_page_title = trace_data.dest_page;
+  trace_data.pages_traveled = malloc(INIT_DATA_ARRAY_SIZE * sizeof(char*));
   pthread_mutex_unlock(&trace_data.lock);
 
   PageData curr_page;
@@ -259,6 +260,16 @@ void* run_trace(void* args) {
 
   // get start page links
   get_page_links(start_page_title, &curr_page);
+
+  // evaluate curr page for dest page title
+  evaluate_page(&curr_page);
+
+  int trace_complete;
+  pthread_mutex_lock(&trace_data.lock);
+  trace_complete = trace_data.trace_complete;
+  pthread_mutex_unlock(&trace_data.lock);
+
+  if (trace_complete) { return NULL; }
 
   // get dest page content
   get_page_content(dest_page_title, &dest_page);
@@ -274,12 +285,8 @@ void* run_trace(void* args) {
 
   // set destination
   set_dest_page(&dest_page);
-
-  // evaluate curr page for dest page title
-  evaluate_page(&curr_page);
-
+ 
   // while destination page not found
-  int trace_complete = 0;
   while (trace_complete == 0) {
     get_links_intros(&curr_page);
 
