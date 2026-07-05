@@ -35,6 +35,7 @@ TraceData trace_data = {   // shared data struct for view, fetcher, and tracer
   .hops = 0,
   .init_complete = 0,
   .trace_complete = 0,
+  .trace_successful = 0,
   .status = 0,
   .lock = PTHREAD_MUTEX_INITIALIZER
 };
@@ -56,11 +57,11 @@ void init_view() {
   initscr();              // begin curses mode
 
   // ensure terminal window size is of minimal compatible dimensions (85x40)
-  /* if (LINES < 40 || COLS < 85) { */
-  /*   endwin(); */
-  /*   fprintf(stderr, "Error: terminal window must be at least 85x40 to render wiki-trace\n"); */
-  /*   exit(1); */
-  /* } */
+  if (LINES < 40 || COLS < 85) {
+    endwin();
+    fprintf(stderr, "Error: terminal window must be at least 85x40 to render wiki-trace\n");
+    exit(1);
+  }
 
   cbreak();               // allow program interupt signals
   noecho();               // dont show keystrokes pressed by user
@@ -198,7 +199,7 @@ static void update_menu(int highlighted) {
 
   // draw each menu option
   for (int i = 0; i < n_choices; i++) {
-    // highlight the ooption the cursor is on
+    // highlight the option the cursor is on
     if (highlighted == i + 1) {   // highlighted is 1 indexed
       wattron(init_windows.menu_window, A_REVERSE);
       mvwprintw(init_windows.menu_window, y, x, "%s", choices[i]);
@@ -439,20 +440,21 @@ static void show_trace() {
       start_trace();
     }
 
-    // checks every 100ms to see if trace worker finished
-    pthread_mutex_lock(&trace_data.lock);
-    if (trace_data.trace_complete == 1) {
-      trace_data.trace_complete = 0;
-      peek_worker_status();
-    }
-    pthread_mutex_unlock(&trace_data.lock);
-
     // checks every 100ms to see if can update trace history
     pthread_mutex_lock(&trace_data.lock);
     if (trace_data.hops > prev_hops) {
       // go through prev_hops + 1 to hops
       // print them
       // update prev_hops
+      update_trace_history(&prev_hops);
+    }
+    pthread_mutex_unlock(&trace_data.lock);
+
+    // checks every 100ms to see if trace worker finished
+    pthread_mutex_lock(&trace_data.lock);
+    if (trace_data.trace_complete == 1) {
+      trace_data.trace_complete = 0;
+      peek_worker_status();
     }
     pthread_mutex_unlock(&trace_data.lock);
   }
@@ -483,7 +485,7 @@ static void init_trace_verification() {
   // show immediate feedback
   WindowProps* history = &trace_windows.hist_text_field;
   wclear(history->window);
-  mvwprintw(history->window, history->write_row, history->write_col, "%s", "Verifying pages...");
+  mvwprintw(history->window, 1, history->write_col, "%s", "Verifying pages...");
   prefresh(history->window,
            history->min_row, history->min_col,
            history->view_top, history->view_left,
@@ -502,7 +504,7 @@ static int peek_worker_status() {
     trace_data.status = 0;
     WindowProps* history = &trace_windows.hist_text_field;
     wclear(history->window);
-    mvwprintw(history->window, history->write_row, history->write_col, "%s", trace_data.err_message);
+    mvwprintw(history->window, 1, history->write_col, "%s", trace_data.err_message);
     prefresh(history->window,
              history->min_row, history->min_col,
              history->view_top, history->view_left,
@@ -513,7 +515,7 @@ static int peek_worker_status() {
     trace_data.status = 0;
     WindowProps* history = &trace_windows.hist_text_field;
     wclear(history->window);
-    mvwprintw(history->window, history->write_row, history->write_col, "%s", trace_data.err_message);
+    mvwprintw(history->window, 1, history->write_col, "%s", trace_data.err_message);
     prefresh(history->window,
              history->min_row, history->min_col,
              history->view_top, history->view_left,
@@ -524,7 +526,7 @@ static int peek_worker_status() {
     trace_data.status = 0;
     WindowProps* history = &trace_windows.hist_text_field;
     wclear(history->window);
-    mvwprintw(history->window, history->write_row, history->write_col, "%s", trace_data.err_message);
+    mvwprintw(history->window, 1, history->write_col, "%s", trace_data.err_message);
     prefresh(history->window,
              history->min_row, history->min_col,
              history->view_top, history->view_left,
@@ -535,7 +537,7 @@ static int peek_worker_status() {
     trace_data.status = 0;
     WindowProps* history = &trace_windows.hist_text_field;
     wclear(history->window);
-    mvwprintw(history->window, history->write_row, history->write_col, "%s", trace_data.err_message);
+    mvwprintw(history->window, 1, history->write_col, "%s", trace_data.err_message);
     prefresh(history->window,
              history->min_row, history->min_col,
              history->view_top, history->view_left,
@@ -554,7 +556,7 @@ static void show_start_message() {
   // write message trace is starting
   WindowProps* history = &trace_windows.hist_text_field;
   wclear(history->window);
-  mvwprintw(history->window, history->write_row, history->write_col, "%s", "Starting trace...");
+  mvwprintw(history->window, 1, history->write_col, "%s", "Starting trace...");
   prefresh(history->window,
            history->min_row, history->min_col,
            history->view_top, history->view_left,
@@ -582,6 +584,7 @@ static void start_trace() {
            history->min_row, history->min_col,
            history->view_top, history->view_left,
            history->view_bot, history->view_right);
+  history->write_row++;
 
   pthread_create(&worker, NULL, run_trace, NULL);
 }
@@ -712,11 +715,24 @@ static void focus_window(WindowProps* window_props, bool focus) {
 
 /*
  * Used to update the trace history view.
- *
- * @param history: a struct containing all necesary fields to update its display text
  */
-void update_trace_history(WindowProps* history) {
-  // TODO
+void update_trace_history(int* prev_hops) {
+  WindowProps* history = &trace_windows.hist_text_field;
+
+  for (int i = *prev_hops; i < trace_data.hops; i++) {
+    mvwprintw(history->window, history->write_row, history->write_col, "%s", trace_data.pages_traveled[i]);
+    prefresh(history->window,
+           history->min_row, history->min_col,
+           history->view_top, history->view_left,
+           history->view_bot, history->view_right);
+    history->write_row++;
+  }
+
+  if (trace_data.trace_complete == 1) {
+    focus_window(history, false);
+  }
+
+  *prev_hops = trace_data.hops;
 }
 
 

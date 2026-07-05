@@ -244,6 +244,7 @@ void* run_trace(void* args) {
   char* start_page_title = strdup(trace_data.start_page);
   char* dest_page_title = strdup(trace_data.dest_page);
   trace_data.pages_traveled = malloc(INIT_DATA_ARRAY_SIZE * sizeof(char*));
+  trace_data.pages_traveled[0] = strdup(trace_data.start_page);
   pthread_mutex_unlock(&trace_data.lock);
 
   PageData curr_page;
@@ -284,6 +285,8 @@ void* run_trace(void* args) {
     score_intros(&curr_page);
 
     char* next_page = get_next_page();
+
+    trace_data.hops++;
 
     free_page_data(&curr_page);
 
@@ -446,15 +449,15 @@ static void parse_links(cJSON* json_data, PageData* page_data) {
   cJSON* pages_element = cJSON_GetArrayItem(pages, 0);
   cJSON* links_array = cJSON_GetObjectItem(pages_element, "links");
 
-  int capacity = INIT_DATA_ARRAY_SIZE;    // num of space initialied array has
-  int count = 0;    // how many elements we have added
+  int capacity = INIT_DATA_ARRAY_SIZE;    // num of space initialized array has
+  int count = page_data->links_count;    // how many elements we have added
   int num_links = cJSON_GetArraySize(links_array);
 
   // dynamically write to page data links field
   for (int i=0; i < num_links; i++) {
     // increase size if we dont have room
     if (count >= capacity) {
-      capacity *= 2;
+      capacity = count + (capacity * 2);
       char** temp = realloc(page_data->links, capacity * sizeof(char*));
       if (temp == NULL) {
         pthread_mutex_lock(&trace_data.lock);
@@ -469,14 +472,14 @@ static void parse_links(cJSON* json_data, PageData* page_data) {
     }
 
     // allocate mem for individual title
-    cJSON* links_element = cJSON_GetArrayItem(links_array, count);
+    cJSON* links_element = cJSON_GetArrayItem(links_array, i);
 
     //
     // can add conditional for only ns:0, only main articles
     //
 
     cJSON* link = cJSON_GetObjectItem(links_element, "title");
-    page_data->links[count] = malloc(strlen(link->valuestring) + 1 * sizeof(char));
+    page_data->links[count] = malloc(strlen(link->valuestring) + 1);
     if (page_data->links[count] == NULL) {
       pthread_mutex_lock(&trace_data.lock);
       trace_data.trace_complete = 1;
@@ -494,7 +497,7 @@ static void parse_links(cJSON* json_data, PageData* page_data) {
     count++;
   }
 
-  page_data->links_count += count;
+  page_data->links_count = count;
 }
 
 

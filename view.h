@@ -63,6 +63,7 @@ typedef struct {
   int hops;
   int init_complete;
   int trace_complete;
+  int trace_successful;
   int status;
   char* err_message;
   int quit_request;
@@ -114,7 +115,7 @@ static void fill_text_fields();
 static void read_user_input(int page, WindowProps* text_field);
 static void update_text_field(WindowProps* text_field, int index);
 static void focus_window(WindowProps* window_props, bool focus);
-void update_trace_history(WindowProps* history);
+void update_trace_history(int* prev_hops);
 
 // functions concerened with starting, pausing, or stopping the trace
 static void init_trace_verification();
