@@ -48,7 +48,7 @@ typedef struct {
   char* intro;
   char* content;
   char** links;
-  int links_count;
+  int num_links;
 } PageData;
 
 
@@ -63,13 +63,16 @@ static size_t write_callback(void *ptr, size_t size, size_t nmemb, Response *res
 void* verify_pages(void* args);
 static int check_page_exists(char* page_data);
 
-// performing the trace
-void* run_trace(void* args);
+// getting pages info
 static void get_page_links(char* page_title, PageData* page_data);
 static void get_page_content(char* page_title, PageData* page_data);
 static void parse_links(cJSON* json_data, PageData* page_data);
 static void get_links_intros(PageData* page_data);
 static void free_page_data(PageData* page_data);
+
+// logic of trace
+void* run_trace(void* args);
+
 
 
 #endif

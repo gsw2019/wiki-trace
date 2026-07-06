@@ -60,7 +60,7 @@ typedef struct {
   char start_page[256];
   char dest_page[256];
   char** pages_traveled;
-  int hops;
+  int num_pages_traveled;
   int init_complete;
   int trace_complete;
   int trace_successful;
@@ -115,7 +115,7 @@ static void fill_text_fields();
 static void read_user_input(int page, WindowProps* text_field);
 static void update_text_field(WindowProps* text_field, int index);
 static void focus_window(WindowProps* window_props, bool focus);
-void update_trace_history(int* prev_hops);
+void update_trace_history();
 
 // functions concerened with starting, pausing, or stopping the trace
 static void init_trace_verification();

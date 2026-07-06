@@ -45,7 +45,7 @@ CURL* init_curl() {
   url_parts.intro_end = "&formatversion=2&exintro=1&explaintext=1";
 
   url_parts.content_start = "https://en.wikipedia.org/w/api.php?action=query&format=json&prop=extracts&titles=";
-  url_parts.content_end = "&formatversion=2&exintro=1&explaintext=1";
+  url_parts.content_end = "&formatversion=2&explaintext=1";
 
   return curl;
 }
@@ -68,6 +68,41 @@ size_t write_callback(void *ptr, size_t size, size_t nmemb, Response *res) {
 
   return size * nmemb;
 }
+
+
+/*
+ * Checks response data to see if the Wikipedia page exists
+ *
+ * @param page_data: string of json data from response
+ * @return 0: page exists
+ * @return ERROR_PARSE: jsom parse error
+ * @return ERROR_EXISTENCE: page is missing
+ */
+static int check_page_exists(char* page_data) {
+  cJSON* json_data = cJSON_Parse(page_data);
+  const char *error_ptr = cJSON_GetErrorPtr();
+  if (error_ptr != NULL) { 
+    fprintf(stderr, "cJSON parse failed. Error before: %s\n", error_ptr);
+    cJSON_Delete(json_data);
+    return ERROR_PARSE;
+  }
+
+  // walk down JSON object
+  cJSON* query = cJSON_GetObjectItem(json_data, "query");
+  cJSON* data = cJSON_GetObjectItem(query, "pages");
+  cJSON* first_page = cJSON_GetArrayItem(data, 0);
+  cJSON* missing = cJSON_GetObjectItem(first_page, "missing");
+
+  if (missing != NULL) {
+    cJSON_Delete(data);
+    return ERROR_EXISTENCE;
+  }
+
+  cJSON_Delete(data);
+
+  return 0;
+}
+
 
 /*
  * Verify user input. Returns different error values depending on the error.
@@ -201,106 +236,66 @@ void* verify_pages(void* args) {
 
 
 /*
- * Checks response data to see if the Wikipedia page exists
+ * Gets the link titles out of the JSON data and stores them in PageData struct
  *
- * @param page_data: string of json data from response
- * @return 0: page exists
- * @return ERROR_PARSE: jsom parse error
- * @return ERROR_EXISTENCE: page is missing
+ * @param json_data: request response
+ * @param page_data: struct to write links to
  */
-static int check_page_exists(char* page_data) {
-  cJSON* json_data = cJSON_Parse(page_data);
-  const char *error_ptr = cJSON_GetErrorPtr();
-  if (error_ptr != NULL) { 
-    fprintf(stderr, "cJSON parse failed. Error before: %s\n", error_ptr);
-    cJSON_Delete(json_data);
-    return ERROR_PARSE;
+static void parse_links(cJSON* json_data, PageData* page_data) {
+  cJSON* query = cJSON_GetObjectItem(json_data,"query");
+  cJSON* pages = cJSON_GetObjectItem(query, "pages");
+  cJSON* pages_element = cJSON_GetArrayItem(pages, 0);
+  cJSON* links_array = cJSON_GetObjectItem(pages_element, "links");
+
+  int capacity = INIT_DATA_ARRAY_SIZE;    // num of space initialized array has
+  int count = page_data->num_links;    // how many elements we have added
+  int num_links = cJSON_GetArraySize(links_array);
+
+  // dynamically write to page data links field
+  for (int i=0; i < num_links; i++) {
+    // increase size if we dont have room
+    if (count >= capacity) {
+      capacity = count + (capacity * 2);
+      char** temp = realloc(page_data->links, capacity * sizeof(char*));
+      if (temp == NULL) {
+        pthread_mutex_lock(&trace_data.lock);
+        trace_data.trace_complete = 1;
+        trace_data.status = ERROR_MEM;
+        trace_data.err_message = "System memory error.";
+        pthread_mutex_unlock(&trace_data.lock);
+        return;
+      }
+
+      page_data->links = temp;
+    }
+
+    // allocate mem for individual title
+    cJSON* links_element = cJSON_GetArrayItem(links_array, i);
+
+    //
+    // can add conditional for only ns:0, only main articles
+    //
+
+    cJSON* link = cJSON_GetObjectItem(links_element, "title");
+    page_data->links[count] = malloc(strlen(link->valuestring) + 1);
+    if (page_data->links[count] == NULL) {
+      pthread_mutex_lock(&trace_data.lock);
+      trace_data.trace_complete = 1;
+      trace_data.status = ERROR_MEM;
+      trace_data.err_message = "System memory error.";
+      pthread_mutex_unlock(&trace_data.lock);
+      return;
+    }
+
+    // copy string into allocated mem
+    strcpy(page_data->links[count], link->valuestring);
+
+    /* fprintf(file, "%s\n", link->valuestring); */
+
+    count++;
   }
 
-  // walk down JSON object
-  cJSON* query = cJSON_GetObjectItem(json_data, "query");
-  cJSON* data = cJSON_GetObjectItem(query, "pages");
-  cJSON* first_page = cJSON_GetArrayItem(data, 0);
-  cJSON* missing = cJSON_GetObjectItem(first_page, "missing");
-
-  if (missing != NULL) {
-    cJSON_Delete(data);
-    return ERROR_EXISTENCE;
-  }
-
-  cJSON_Delete(data);
-
-  return 0;
-}
-
-
-/*
- * Begins running the trace by fetching page links and intros. Ran by a worker thread.
- *
- * @param args: NULL, using global state var trace_data in worker
- */
-void* run_trace(void* args) {
-  pthread_mutex_lock(&trace_data.lock);
-  char* start_page_title = strdup(trace_data.start_page);
-  char* dest_page_title = strdup(trace_data.dest_page);
-  trace_data.pages_traveled = malloc(INIT_DATA_ARRAY_SIZE * sizeof(char*));
-  trace_data.pages_traveled[0] = strdup(trace_data.start_page);
-  pthread_mutex_unlock(&trace_data.lock);
-
-  PageData curr_page;
-  PageData dest_page;
-
-  // get start page links
-  get_page_links(start_page_title, &curr_page);
-
-  // evaluate curr page for dest page title
-  evaluate_page(&curr_page);
-
-  int trace_complete;
-  pthread_mutex_lock(&trace_data.lock);
-  trace_complete = trace_data.trace_complete;
-  pthread_mutex_unlock(&trace_data.lock);
-
-  if (trace_complete) { return NULL; }
-
-  // get dest page content
-  get_page_content(dest_page_title, &dest_page);
-
-  // leave if encountered errors
-  int status;
-  pthread_mutex_lock(&trace_data.lock);
-  status = trace_data.status;
-  pthread_mutex_unlock(&trace_data.lock);
-  if (status != 0) { return NULL; }
-
-  return NULL;
-
-  // set destination
-  set_dest_page(&dest_page);
- 
-  // while destination page not found
-  while (trace_complete == 0) {
-    get_links_intros(&curr_page);
-
-    score_intros(&curr_page);
-
-    char* next_page = get_next_page();
-
-    trace_data.hops++;
-
-    free_page_data(&curr_page);
-
-    get_page_links(next_page, &curr_page);
-
-    evaluate_page(&curr_page);
-
-    pthread_mutex_lock(&trace_data.lock);
-    trace_complete = trace_data.trace_complete;
-    pthread_mutex_unlock(&trace_data.lock);
-
-  }
-
-  return NULL;
+  page_data->num_links = count;
 }
 
 
@@ -311,7 +306,7 @@ void* run_trace(void* args) {
  * @param curr_page: struct to write page data to
  */
 static void get_page_links(char* page_title, PageData* page_data) {
-  // initialize struct t hold response data
+  // initialize struct to hold response data
   Response page_response = { .data = malloc(1), .size = 0 };
   if (page_response.data == NULL) {
     pthread_mutex_lock(&trace_data.lock);
@@ -325,7 +320,7 @@ static void get_page_links(char* page_title, PageData* page_data) {
   // initialize struct to hold page data
   page_data->title = page_title;
   page_data->links = malloc(INIT_DATA_ARRAY_SIZE * sizeof(char*));
-  page_data->links_count = 0;
+  page_data->num_links = 0;
   if (page_data->links == NULL) {
     pthread_mutex_lock(&trace_data.lock);
     trace_data.trace_complete = 1;
@@ -438,78 +433,52 @@ static void get_page_links(char* page_title, PageData* page_data) {
 
 
 /*
- * Gets the link titles out of the JSON data and stores them in PageData struct
- *
- * @param json_data: request response
- * @param page_data: struct to write links to
- */
-static void parse_links(cJSON* json_data, PageData* page_data) {
-  cJSON* query = cJSON_GetObjectItem(json_data,"query");
-  cJSON* pages = cJSON_GetObjectItem(query, "pages");
-  cJSON* pages_element = cJSON_GetArrayItem(pages, 0);
-  cJSON* links_array = cJSON_GetObjectItem(pages_element, "links");
-
-  int capacity = INIT_DATA_ARRAY_SIZE;    // num of space initialized array has
-  int count = page_data->links_count;    // how many elements we have added
-  int num_links = cJSON_GetArraySize(links_array);
-
-  // dynamically write to page data links field
-  for (int i=0; i < num_links; i++) {
-    // increase size if we dont have room
-    if (count >= capacity) {
-      capacity = count + (capacity * 2);
-      char** temp = realloc(page_data->links, capacity * sizeof(char*));
-      if (temp == NULL) {
-        pthread_mutex_lock(&trace_data.lock);
-        trace_data.trace_complete = 1;
-        trace_data.status = ERROR_MEM;
-        trace_data.err_message = "System memory error.";
-        pthread_mutex_unlock(&trace_data.lock);
-        return;
-      }
-
-      page_data->links = temp;
-    }
-
-    // allocate mem for individual title
-    cJSON* links_element = cJSON_GetArrayItem(links_array, i);
-
-    //
-    // can add conditional for only ns:0, only main articles
-    //
-
-    cJSON* link = cJSON_GetObjectItem(links_element, "title");
-    page_data->links[count] = malloc(strlen(link->valuestring) + 1);
-    if (page_data->links[count] == NULL) {
-      pthread_mutex_lock(&trace_data.lock);
-      trace_data.trace_complete = 1;
-      trace_data.status = ERROR_MEM;
-      trace_data.err_message = "System memory error.";
-      pthread_mutex_unlock(&trace_data.lock);
-      return;
-    }
-
-    // copy string into allocated mem
-    strcpy(page_data->links[count], link->valuestring);
-
-    /* fprintf(file, "%s\n", link->valuestring); */
-
-    count++;
-  }
-
-  page_data->links_count = count;
-}
-
-
-
-/*
  * Gets the pages entire content.
  *
  * @param page_title: title of page to get content of
  * @param page: struct to write page content to
  */
 static void get_page_content(char* page_title, PageData* page_data) {
-  // TODO
+  // initialize struct to hold response data
+  Response page_response = { .data = malloc(1), .size = 0 };
+  if (page_response.data == NULL) {
+    pthread_mutex_lock(&trace_data.lock);
+    trace_data.trace_complete = 1;
+    trace_data.status = ERROR_MEM;
+    trace_data.err_message = "System memory error.";
+    pthread_mutex_unlock(&trace_data.lock);
+    return;
+  }
+
+  // build URL for page content
+  char url_page_content[URL_LEN] = {0};
+  char* url_page_title = curl_easy_escape(curl, page_title, 0);
+  strcat(url_page_content, url_parts.content_start);
+  strcat(url_page_content, url_page_title);
+  strcat(url_page_content, url_parts.content_end);
+
+  // request page content
+  curl_easy_setopt(curl, CURLOPT_URL, url_page_content);
+  curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
+  curl_easy_setopt(curl, CURLOPT_WRITEDATA, &page_response);
+  curl_easy_perform(curl);
+
+  // check for parse error
+  cJSON* json_data = cJSON_Parse(page_response.data);
+  const char *error_ptr = cJSON_GetErrorPtr();
+  if (error_ptr != NULL) {
+    fprintf(stderr, "cJSON parse failed. Error before: %s\n", error_ptr);
+    pthread_mutex_lock(&trace_data.lock);
+    trace_data.trace_complete = 1;
+    trace_data.status = ERROR_PARSE;
+    trace_data.err_message = "JSON parse error. Quit to see error message.";
+    pthread_mutex_unlock(&trace_data.lock);
+    cJSON_Delete(json_data);
+    return;
+  }
+
+
+
 }
 
 
@@ -532,4 +501,76 @@ static void get_links_intros(PageData* page_data) {
 static void free_page_data(PageData* page_data) {
   // TODO
 }
+
+
+/*
+ * Begins running the trace by fetching page links and intros. Ran by a worker thread.
+ *
+ * @param args: NULL, using global state var trace_data in worker
+ */
+void* run_trace(void* args) {
+  pthread_mutex_lock(&trace_data.lock);
+  char* start_page_title = strdup(trace_data.start_page);
+  char* dest_page_title = strdup(trace_data.dest_page);
+  trace_data.pages_traveled = malloc(INIT_DATA_ARRAY_SIZE * sizeof(char*));
+  trace_data.pages_traveled[0] = strdup(trace_data.start_page);
+  trace_data.num_pages_traveled++;
+  pthread_mutex_unlock(&trace_data.lock);
+
+  PageData curr_page;
+  PageData dest_page;
+
+  // get start page links
+  get_page_links(start_page_title, &curr_page);
+
+  // evaluate curr page for dest page title
+  evaluate_page(&curr_page);
+
+  // check if dest on start and end if so
+  int trace_complete;
+  pthread_mutex_lock(&trace_data.lock);
+  trace_complete = trace_data.trace_complete;
+  pthread_mutex_unlock(&trace_data.lock);
+  if (trace_complete) { return NULL; }
+
+  // get dest page content
+  get_page_content(dest_page_title, &dest_page);
+
+  // leave if encountered errors
+  int status;
+  pthread_mutex_lock(&trace_data.lock);
+  status = trace_data.status;
+  pthread_mutex_unlock(&trace_data.lock);
+  if (status != 0) { return NULL; }
+
+  return NULL;
+
+  // set destination info in tracer module
+  set_dest_page(&dest_page);
+ 
+  // while destination page not found
+  while (trace_complete == 0) {
+    get_links_intros(&curr_page);
+
+    score_intros(&curr_page);
+
+    char* next_page = get_next_page();
+
+    trace_data.num_pages_traveled++;
+
+    free_page_data(&curr_page);
+
+    get_page_links(next_page, &curr_page);
+
+    evaluate_page(&curr_page);
+
+    pthread_mutex_lock(&trace_data.lock);
+    trace_complete = trace_data.trace_complete;
+    pthread_mutex_unlock(&trace_data.lock);
+
+  }
+
+  return NULL;
+}
+
 
