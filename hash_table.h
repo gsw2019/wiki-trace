@@ -9,6 +9,9 @@
 #define HASH_TABLE_H
 
 
+#include <stdio.h>
+
+
 #define SIZE  1031
 #define PRIME 37
 
@@ -35,7 +38,7 @@ double hash_table_get(HashTable* ht, char* key);
 int hash_table_set(HashTable* ht, char* key, double val);
 
 // visualize hash table
-void hash_table_print(HashTable* ht);
+void hash_table_print(HashTable* ht, FILE* file);
 
 #endif
 

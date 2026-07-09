@@ -537,6 +537,13 @@ void* run_trace(void* args) {
   char* start_page_title = strdup(trace_data.start_page);
   char* dest_page_title = strdup(trace_data.dest_page);
   trace_data.pages_traveled = malloc(INIT_DATA_ARRAY_SIZE * sizeof(char*));
+  if (trace_data.pages_traveled == NULL) {
+    trace_data.trace_complete = 1;
+    trace_data.status = ERROR_MEM;
+    trace_data.err_message = "System memory error. Pages travelled for trace data.";
+    pthread_mutex_unlock(&trace_data.lock);
+    return NULL;
+  }
   trace_data.pages_traveled[0] = strdup(trace_data.start_page);
   trace_data.num_pages_traveled++;
   pthread_mutex_unlock(&trace_data.lock);
@@ -558,7 +565,7 @@ void* run_trace(void* args) {
   // evaluate curr page for dest page title
   evaluate_page(&curr_page);
 
-  // check if dest page was on start page and end if so
+  // check if dest page was on start page or error and end if either
   pthread_mutex_lock(&trace_data.lock);
   trace_complete = trace_data.trace_complete;
   pthread_mutex_unlock(&trace_data.lock);

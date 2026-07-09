@@ -25,7 +25,7 @@ typedef struct {
 
 void set_dest_page_title(char* page_title);
 void set_dest_page_content(char* page_content);
-void clean_term(char* token);
+char* clean_term(char* token);
 HashTable* compute_term_freq(char* string);
 void evaluate_page(PageData* page_data);
 void score_intros(PageData* page_data);

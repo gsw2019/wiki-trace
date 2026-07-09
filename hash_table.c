@@ -51,6 +51,7 @@ int hash_table_add(HashTable* ht, char* key, double val) {
 
     ht->buckets[index]->key = strdup(key);
     ht->buckets[index]->value = val;
+    ht->buckets[index]->next = NULL;
     ht->size++;
 
     return 0;
@@ -60,7 +61,6 @@ int hash_table_add(HashTable* ht, char* key, double val) {
   Node* curr_node = ht->buckets[index];
   while (curr_node) {
     if (strcmp(curr_node->key, key) == 0) {
-      double old_val = curr_node->value;
       curr_node->value = val;
       return 1;
     }
@@ -143,7 +143,7 @@ int hash_table_set(HashTable* ht, char* key, double new_val) {
  *
  * @param ht: hash table to be printed
  */
-void hash_table_print(HashTable* ht) {
+void hash_table_print(HashTable* ht, FILE* file) {
   // go through each bucket
   for (int i=0; i < SIZE; i++) {
     Node* curr_node = ht->buckets[i];
@@ -152,13 +152,15 @@ void hash_table_print(HashTable* ht) {
 
     // print a buckets list
     while (curr_node) {
-      printf("key: %s, value: %lf", curr_node->key, curr_node->value);
-      printf("%s", " | ");
+      fprintf(file, "key: %s, value: %lf", curr_node->key, curr_node->value);
+      fprintf(file, "%s", " | ");
       curr_node = curr_node->next;
     }
 
-    printf("%s", "\n");
+    fprintf(file, "%s", "\n");
   }
+
+  fflush(file);
 }
 
 

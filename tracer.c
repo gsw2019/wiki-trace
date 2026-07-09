@@ -41,19 +41,20 @@ void set_dest_page_title(char* page_title) {
  *
  * @param token: term to be cleaned
  */
-void clean_term(char* token) {
+char* clean_term(char* token) {
   char* dest = token;
   char* src = token;
 
   while (*src) {
     // skip char
-    if (ispunct(*src)) {
+    // ctype.h functions expect unsigned char
+    if (ispunct((unsigned char) *src)) {
       src++;
     }
 
     // make lower and append
-    else if (isupper(*src)) {
-      *dest = tolower(*src);
+    else if (isupper((unsigned char) *src)) {
+      *dest = tolower((unsigned char) *src);
       src++;
       dest++;
     }
@@ -67,6 +68,8 @@ void clean_term(char* token) {
   }
 
   *dest = '\0';
+
+  return token;
 }
 
 
@@ -107,7 +110,8 @@ int is_stop_word(char* token) {
  * @return a hash table of term frequencies
  */
 HashTable* compute_term_freq(char* string) {
-  HashTable* ht = malloc(sizeof(HashTable));
+  HashTable* ht = calloc(1, sizeof(HashTable));
+  if (ht == NULL) { return NULL; } 
 
   // make mutable array for tokenization
   char str_arr[strlen(string) + 1];
@@ -117,12 +121,18 @@ HashTable* compute_term_freq(char* string) {
   char* token = strtok(str_arr, DELIMITERS);
   while (token) {
     // clean term
-    clean_term(token);
+    char* clean_token = clean_term(token);
+
+    // empty string
+    if (!(*clean_token)) {
+      token = strtok(NULL, DELIMITERS);
+      continue;
+    }
 
     // stem word
-    char stemmed_token[strlen(token) + 1];
-    strcpy(stemmed_token, token);
-    int end = stem(token, 0, strlen(token) - 1);
+    char stemmed_token[strlen(clean_token) + 1];
+    strcpy(stemmed_token, clean_token);
+    int end = stem(clean_token, 0, strlen(clean_token) - 1);
     stemmed_token[end + 1] = '\0';
 
     // continue if a stop word
@@ -134,7 +144,7 @@ HashTable* compute_term_freq(char* string) {
     // not in hash table
     // add it
     else if (hash_table_get(ht, stemmed_token) == -1) {
-      hash_table_add(ht, stemmed_token, 1);
+      hash_table_add(ht,stemmed_token, 1);
     }
 
     // in hash table, update frequency
@@ -158,7 +168,18 @@ HashTable* compute_term_freq(char* string) {
  */
 void set_dest_page_content(char* page_content) { 
   destination_page.content = strdup(page_content);
+
   destination_page.content_tf = compute_term_freq(destination_page.content);
+  if (destination_page.content_tf == NULL) {
+    pthread_mutex_lock(&trace_data.lock);
+    trace_data.trace_complete = 1;
+    trace_data.status = ERROR_MEM;
+    trace_data.err_message = "System memory error. Destination page tf hash table initialization."; 
+    pthread_mutex_unlock(&trace_data.lock);
+  }
+
+
+  hash_table_print(destination_page.content_tf, file);
 }
 
 
@@ -180,7 +201,7 @@ void evaluate_page(PageData* page_data) {
       char** temp = realloc(trace_data.pages_traveled, trace_data.num_pages_traveled * sizeof(char*));
       if (temp == NULL) {
         trace_data.status = ERROR_MEM;
-        trace_data.err_message = "System memory error.";
+        trace_data.err_message = "System memory error. Adding destination page to pages traveled";
         pthread_mutex_unlock(&trace_data.lock);
         return;
       }
