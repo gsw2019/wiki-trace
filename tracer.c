@@ -1,6 +1,6 @@
 /**
  * Handles the data recieved from Wikipedia. Stores the destination page data and scores
- * of each page fetched.
+ * of each pages fetched.
  *
  * @author Garret Wilson
  */
@@ -18,6 +18,8 @@
 
 
 DestPage destination_page;
+
+HashTable ht_stopwords;
 
 FILE* stop_words_file;
 
@@ -74,36 +76,6 @@ char* clean_term(char* token) {
 
 
 /*
- * checks if a word is a stop word or not
- *
- * @param token: term to be checked for being a stop word
- * @return 0 if token is not a stop word, 1 otherwise
- */
-int is_stop_word(char* token) {
-  stop_words_file = fopen("EN_stopwords.txt", "r");
-
-  char* stop_word = NULL;
-  size_t len = 0;
-  while (getline(&stop_word, &len, stop_words_file) != -1) {
-    // string complentary span
-    // return number of chars before first char in second param
-    // since using as index, willl make that char a null terminator
-    stop_word[strcspn(stop_word, DELIMITERS)] = '\0';
-    if (strcmp(token, stop_word) == 0) { 
-      free(stop_word);
-      fclose(stop_words_file);
-      return 1; 
-    }
-  }
-
-  free(stop_word);
-  fclose(stop_words_file);
-
-  return 0;
-}
-
-
-/*
  * Computes the destination pages content term frequencies
  *
  * @param string: the string to compute frequencies for
@@ -136,7 +108,7 @@ HashTable* compute_term_freq(char* string) {
     stemmed_token[end + 1] = '\0';
 
     // continue if a stop word
-    if (is_stop_word(stemmed_token)) {
+    if (hash_table_get(&ht_stopwords, stemmed_token) != -1) {
       token = strtok(NULL, DELIMITERS);
       continue;
     }
@@ -157,7 +129,40 @@ HashTable* compute_term_freq(char* string) {
   }
 
   return ht;
+}
 
+
+/*
+ * Reads stop words into a hash table for quick lookup. Avoids opening and closing a
+ * file for each evaluation of a word.
+ */
+void init_stopwords() {
+  stop_words_file = fopen("EN_stopwords.txt", "r");
+  if (stop_words_file == NULL) {
+    pthread_mutex_lock(&trace_data.lock);
+    trace_data.trace_complete = 1;
+    trace_data.status = ERROR_FILE;
+    trace_data.err_message = "Opening file error. Reading EN stop words";
+    pthread_mutex_unlock(&trace_data.lock);
+    return;
+  }
+
+  char* stop_word = NULL;
+  size_t len = 0;
+  while (getline(&stop_word, &len, stop_words_file) != -1) {
+    // string complentary span
+    // return number of chars before first char in second param
+    // since using as index, willl make that char a null terminator
+    stop_word[strcspn(stop_word, DELIMITERS)] = '\0';
+
+    // add word if not in table
+    if (hash_table_get(&ht_stopwords, stop_word) == -1) {
+      hash_table_add(&ht_stopwords, stop_word, 1.0);
+    }
+  }
+
+  free(stop_word);
+  fclose(stop_words_file);
 }
 
 
@@ -166,8 +171,16 @@ HashTable* compute_term_freq(char* string) {
  *
  * @param page_content: content of page which is the destination page
  */
-void set_dest_page_content(char* page_content) { 
+void set_dest_page_content(char* page_content) {
+  int status;
+
   destination_page.content = strdup(page_content);
+
+  init_stopwords();
+  pthread_mutex_lock(&trace_data.lock);
+  status = trace_data.status;
+  pthread_mutex_unlock(&trace_data.lock);
+  if (status) { return; }
 
   destination_page.content_tf = compute_term_freq(destination_page.content);
   if (destination_page.content_tf == NULL) {
@@ -176,10 +189,32 @@ void set_dest_page_content(char* page_content) {
     trace_data.status = ERROR_MEM;
     trace_data.err_message = "System memory error. Destination page tf hash table initialization."; 
     pthread_mutex_unlock(&trace_data.lock);
+    return;
   }
 
-
   hash_table_print(destination_page.content_tf, file);
+}
+
+
+/*
+ * Performs scoring on the paage intros using the TF of their intros and the
+ * TF of the destination pages inro
+ *
+ * @param page_data: struct with current pages links' titles and intros
+ */
+void score_intros(PageData* page_data) {
+  // TODO
+}
+
+
+/*
+ * Returns the page with the highest similarity score computed
+ *
+ * @return a page title
+ */
+char* get_next_page() {
+
+  return "temp";
 }
 
 
@@ -215,27 +250,4 @@ void evaluate_page(PageData* page_data) {
 
   pthread_mutex_unlock(&trace_data.lock);
 }
-
-
-/*
- * Performs scoring on the paage intros using the TF of their intros and the
- * TF of the destination pages inro
- *
- * @param page_data: struct with current pages links' titles and intros
- */
-void score_intros(PageData* page_data) {
-  // TODO
-}
-
-
-/*
- * Returns the page with the highest similarity score computed
- *
- * @return a page title
- */
-char* get_next_page() {
-
-  return "temp";
-}
-
 

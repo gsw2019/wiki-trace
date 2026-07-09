@@ -1,6 +1,5 @@
 /**
- * Implementations of view.h prototypes. Renders a TUI that has 4 different views: launch screen,
- * trace screen, settings screen, and an about screen.
+ * Renders a TUI that has 4 different views: launch screen, trace screen, settings screen, and an about screen.
  *
  * In order for the TUI to remain rendered, subsequent work such as fetching data and running
  * the tracing algorithm are ran through seperate threads.
@@ -363,50 +362,23 @@ static void init_trace_verification() {
  * mutex where it is called.
  */
 static int peek_worker_status() {
-  if (trace_data.status == ERROR_INPUT) {    // missing input
-    trace_data.status = 0;
-    WindowProps* history = &trace_windows.hist_text_field;
-    wclear(history->window);
-    mvwprintw(history->window, 1, history->write_col, "%s", trace_data.err_message);
-    prefresh(history->window,
-             history->min_row, history->min_col,
-             history->view_top, history->view_left,
-             history->view_bot, history->view_right);
-    return 1;
+  pthread_mutex_lock(&trace_data.lock);
+
+  switch (trace_data.status) {
+    case ERROR_INPUT: case ERROR_PARSE: case ERROR_EXISTENCE: case ERROR_MEM: case ERROR_FILE:
+      trace_data.status = 0;
+      WindowProps* history = &trace_windows.hist_text_field;
+      wclear(history->window);
+      mvwprintw(history->window, 1, history->write_col, "%s", trace_data.err_message);
+      prefresh(history->window,
+               history->min_row, history->min_col,
+               history->view_top, history->view_left,
+               history->view_bot, history->view_right);
+      pthread_mutex_unlock(&trace_data.lock);
+      return 1;
   }
-  else if (trace_data.status == ERROR_MEM) {    // error with malloc
-    trace_data.status = 0;
-    WindowProps* history = &trace_windows.hist_text_field;
-    wclear(history->window);
-    mvwprintw(history->window, 1, history->write_col, "%s", trace_data.err_message);
-    prefresh(history->window,
-             history->min_row, history->min_col,
-             history->view_top, history->view_left,
-             history->view_bot, history->view_right);
-    return 1;
-  }
-  else if (trace_data.status == ERROR_PARSE) {   // cJSON parse error
-    trace_data.status = 0;
-    WindowProps* history = &trace_windows.hist_text_field;
-    wclear(history->window);
-    mvwprintw(history->window, 1, history->write_col, "%s", trace_data.err_message);
-    prefresh(history->window,
-             history->min_row, history->min_col,
-             history->view_top, history->view_left,
-             history->view_bot, history->view_right);
-    return 1;
-  }
-  else if (trace_data.status == ERROR_EXISTENCE) {   // page doesnt exists
-    trace_data.status = 0;
-    WindowProps* history = &trace_windows.hist_text_field;
-    wclear(history->window);
-    mvwprintw(history->window, 1, history->write_col, "%s", trace_data.err_message);
-    prefresh(history->window,
-             history->min_row, history->min_col,
-             history->view_top, history->view_left,
-             history->view_bot, history->view_right);
-    return 1;
-  }
+
+  pthread_mutex_unlock(&trace_data.lock);
 
   return 0;
 }
@@ -576,6 +548,8 @@ static void focus_window(WindowProps* window_props, bool focus) {
 void update_trace_history() {
   WindowProps* history = &trace_windows.hist_text_field;
 
+  pthread_mutex_lock(&trace_data.lock);
+
   for (int i = num_pages_displayed; i < trace_data.num_pages_traveled; i++) {
     mvwprintw(history->window, history->write_row, history->write_col, "%s", trace_data.pages_traveled[i]);
     prefresh(history->window,
@@ -594,6 +568,8 @@ void update_trace_history() {
   }
 
   num_pages_displayed = trace_data.num_pages_traveled;
+
+  pthread_mutex_unlock(&trace_data.lock);
 }
 
 
@@ -744,7 +720,9 @@ static void show_trace() {
 
   keypad(main_window->window, TRUE);    // handle actions via key presses
   wtimeout(main_window->window, 100);   // errors out wgetch after 100 ms, falls to defualt
+
   int prev_hops = 0;
+  int init_complete, status, num_pages_traveled, trace_complete;
 
   while (1) {
     int ch = wgetch(main_window->window);
@@ -803,17 +781,28 @@ static void show_trace() {
         break;
     }
 
-    // checks every 100ms to see if verification worker finished
+    // capture and reset statu vars
     pthread_mutex_lock(&trace_data.lock);
-    if (trace_data.init_complete == 1) {
-      trace_data.init_complete = 0;
+    init_complete = trace_data.init_complete;
+    trace_data.init_complete = 0;
+
+    status = trace_data.status;
+    trace_data.status = 0;
+
+    trace_complete = trace_data.trace_complete;
+    trace_data.trace_complete = 0;
+
+    num_pages_traveled = trace_data.num_pages_traveled;
+    pthread_mutex_unlock(&trace_data.lock);
+
+
+    // check every 100ms to see if verification worker finished
+    if (init_complete == 1) {
       if (peek_worker_status() == 0) {
-        pthread_mutex_unlock(&trace_data.lock);
         show_start_message();
         continue;
       }
     }
-    pthread_mutex_unlock(&trace_data.lock);
 
     // 2 seconds after shwoing start message begin the trace
     if ((start_message_delay != 0) && (time(NULL) - start_message_delay >= 2)) {
@@ -821,23 +810,18 @@ static void show_trace() {
       start_trace();
     }
 
-    // checks every 100ms to see if can update trace history
-    pthread_mutex_lock(&trace_data.lock);
-    if (trace_data.num_pages_traveled > prev_hops) {
+    // check every 100ms to see if can update trace history
+    if (num_pages_traveled > prev_hops) {
       // go through prev_hops + 1 to hops
       // print them
       // update prev_hops
       update_trace_history();
     }
-    pthread_mutex_unlock(&trace_data.lock);
 
-    // checks every 100ms to see if trace worker finished
-    pthread_mutex_lock(&trace_data.lock);
-    if (trace_data.trace_complete == 1) {
-      trace_data.trace_complete = 0;
+    // check every 100ms to see if trace worker finished
+    if (trace_complete == 1) {
       peek_worker_status();
     }
-    pthread_mutex_unlock(&trace_data.lock);
   }
 }
 

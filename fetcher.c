@@ -1,5 +1,7 @@
 /**
- * Implementations for the fetcher.h prototypes. Handles requests for Wikipedia data via curl
+ * Handles requests for Wikipedia data via curl. Organizes data for the page currently
+ * being walked and sends it to tracer module. Sends destination paage data to tracer
+ * module.
  *
  * @author Garret Wilson
  */
@@ -568,23 +570,11 @@ void* run_trace(void* args) {
   // check if dest page was on start page or error and end if either
   pthread_mutex_lock(&trace_data.lock);
   trace_complete = trace_data.trace_complete;
-  pthread_mutex_unlock(&trace_data.lock);
-  if (trace_complete) { return NULL; }
-
-
-  //
-  // everything above here in working order
-  //
-
-
-  // set dest page content
-  pthread_mutex_lock(&trace_data.lock);
   status = trace_data.status;
   pthread_mutex_unlock(&trace_data.lock);
-  if (status != 0) { return NULL; }
-  set_dest_page_content(get_page_content(dest_page_title));
+  if (trace_complete | status) { return NULL; }
 
-  return NULL;
+  set_dest_page_content(get_page_content(dest_page_title));
 
   // leave before looping if encountered errors
   pthread_mutex_lock(&trace_data.lock);
@@ -594,6 +584,13 @@ void* run_trace(void* args) {
 
   // while destination page not found
   while (trace_complete == 0) {
+
+
+    //
+    // functioning above here
+    //
+
+
     get_links_intros(&curr_page);
 
     return NULL;

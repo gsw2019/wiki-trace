@@ -21,6 +21,7 @@
 #define ERROR_INPUT          2
 #define ERROR_PARSE          3
 #define ERROR_EXISTENCE      4
+#define ERROR_FILE           5
 
 #define INIT_DATA_ARRAY_SIZE 2
 
