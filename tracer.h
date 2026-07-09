@@ -10,16 +10,23 @@
 
 
 #include "fetcher.h"
+#include "hash_table.h"
+
+
+#define DELIMITERS " \n\t\r"
 
 
 typedef struct {
   char* title;
-  char* intro;
   char* content;
+  HashTable* content_tf;
 } DestPage;
 
 
-void set_dest_page(PageData* dest_page);
+void set_dest_page_title(char* page_title);
+void set_dest_page_content(char* page_content);
+void clean_term(char* token);
+HashTable* compute_term_freq(char* string);
 void evaluate_page(PageData* page_data);
 void score_intros(PageData* page_data);
 char* get_next_page();

@@ -849,6 +849,3 @@ static void show_settings() {
   // TODO
 }
 
-
-
-

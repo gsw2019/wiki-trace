@@ -27,7 +27,7 @@ FILE* file;
  * @return a handle to curl object
  */
 CURL* init_curl() {
-  file = fopen("output.txt", "w");
+  // file = fopen("output.txt", "w");
 
   curl = curl_easy_init();
   curl_easy_setopt(curl, CURLOPT_USERAGENT, "wiki-trace project (wsg2026@outlook.com)");
@@ -83,6 +83,7 @@ static int check_page_exists(char* page_data) {
   const char *error_ptr = cJSON_GetErrorPtr();
   if (error_ptr != NULL) { 
     fprintf(stderr, "cJSON parse failed. Error before: %s\n", error_ptr);
+    fflush(stderr);
     cJSON_Delete(json_data);
     return ERROR_PARSE;
   }
@@ -144,7 +145,7 @@ void* verify_pages(void* args) {
     pthread_mutex_lock(&trace_data.lock);
     trace_data.init_complete = 1;
     trace_data.status = ERROR_MEM;
-    trace_data.err_message = "System memory error.";
+    trace_data.err_message = "System memory error. Response for start page.";
     pthread_mutex_unlock(&trace_data.lock);
     return NULL;
   }
@@ -158,7 +159,7 @@ void* verify_pages(void* args) {
     pthread_mutex_lock(&trace_data.lock);
     trace_data.init_complete = 1;
     trace_data.status = ERROR_MEM;
-    trace_data.err_message = "System memory error";
+    trace_data.err_message = "System memory error. Response for destination page.";
     pthread_mutex_unlock(&trace_data.lock);
     return NULL;
   }
@@ -247,7 +248,7 @@ static void parse_links(cJSON* json_data, PageData* page_data) {
   cJSON* pages_element = cJSON_GetArrayItem(pages, 0);
   cJSON* links_array = cJSON_GetObjectItem(pages_element, "links");
 
-  int capacity = INIT_DATA_ARRAY_SIZE;    // num of space initialized array has
+  int capacity = page_data->capacity_links;    // num of space initialized array has
   int count = page_data->num_links;    // how many elements we have added
   int num_links = cJSON_GetArraySize(links_array);
 
@@ -255,34 +256,36 @@ static void parse_links(cJSON* json_data, PageData* page_data) {
   for (int i=0; i < num_links; i++) {
     // increase size if we dont have room
     if (count >= capacity) {
-      capacity = count + (capacity * 2);
+      capacity *= 2;
       char** temp = realloc(page_data->links, capacity * sizeof(char*));
       if (temp == NULL) {
         pthread_mutex_lock(&trace_data.lock);
         trace_data.trace_complete = 1;
         trace_data.status = ERROR_MEM;
-        trace_data.err_message = "System memory error.";
+        trace_data.err_message = "System memory error. Storing page links.";
         pthread_mutex_unlock(&trace_data.lock);
         return;
       }
 
+      page_data->capacity_links = capacity;
       page_data->links = temp;
     }
 
-    // allocate mem for individual title
+    // get array element with link info
     cJSON* links_element = cJSON_GetArrayItem(links_array, i);
 
     //
     // can add conditional for only ns:0, only main articles
     //
 
+    // allocate mem for individual title
     cJSON* link = cJSON_GetObjectItem(links_element, "title");
     page_data->links[count] = malloc(strlen(link->valuestring) + 1);
     if (page_data->links[count] == NULL) {
       pthread_mutex_lock(&trace_data.lock);
       trace_data.trace_complete = 1;
       trace_data.status = ERROR_MEM;
-      trace_data.err_message = "System memory error.";
+      trace_data.err_message = "System memory error. Storing a page link";
       pthread_mutex_unlock(&trace_data.lock);
       return;
     }
@@ -300,19 +303,19 @@ static void parse_links(cJSON* json_data, PageData* page_data) {
 
 
 /*
- * Gets all of the specified pages links
+ * Gets all of the specified page's links
  *
  * @param page_title: title of page to get links of
  * @param curr_page: struct to write page data to
  */
-static void get_page_links(char* page_title, PageData* page_data) {
+static void get_page_links(PageData* page_data, char* page_title) {
   // initialize struct to hold response data
   Response page_response = { .data = malloc(1), .size = 0 };
   if (page_response.data == NULL) {
     pthread_mutex_lock(&trace_data.lock);
     trace_data.trace_complete = 1;
     trace_data.status = ERROR_MEM;
-    trace_data.err_message = "System memory error.";
+    trace_data.err_message = "System memory error. Response for page links";
     pthread_mutex_unlock(&trace_data.lock);
     return;
   }
@@ -321,11 +324,12 @@ static void get_page_links(char* page_title, PageData* page_data) {
   page_data->title = page_title;
   page_data->links = malloc(INIT_DATA_ARRAY_SIZE * sizeof(char*));
   page_data->num_links = 0;
+  page_data->capacity_links = INIT_DATA_ARRAY_SIZE;
   if (page_data->links == NULL) {
     pthread_mutex_lock(&trace_data.lock);
     trace_data.trace_complete = 1;
     trace_data.status = ERROR_MEM;
-    trace_data.err_message = "System memory error.";
+    trace_data.err_message = "System memory error. List for page links";
     pthread_mutex_unlock(&trace_data.lock);
     return;
   }
@@ -348,6 +352,7 @@ static void get_page_links(char* page_title, PageData* page_data) {
   const char *error_ptr = cJSON_GetErrorPtr();
   if (error_ptr != NULL) {
     fprintf(stderr, "cJSON parse failed. Error before: %s\n", error_ptr);
+    fflush(stderr);
     pthread_mutex_lock(&trace_data.lock);
     trace_data.trace_complete = 1;
     trace_data.status = ERROR_PARSE;
@@ -428,26 +433,32 @@ static void get_page_links(char* page_title, PageData* page_data) {
 
       cont_request = 0;
     }
+
+    // free json data
+    free(json_data);
+
+    // free heap allocated data after last use
+    free(page_response.data);
   }
 }
 
 
 /*
- * Gets the pages entire content.
+ * Gets the pages entire content in plain text.
  *
  * @param page_title: title of page to get content of
  * @param page: struct to write page content to
  */
-static void get_page_content(char* page_title, PageData* page_data) {
+char* get_page_content(char* page_title) {
   // initialize struct to hold response data
   Response page_response = { .data = malloc(1), .size = 0 };
   if (page_response.data == NULL) {
     pthread_mutex_lock(&trace_data.lock);
     trace_data.trace_complete = 1;
     trace_data.status = ERROR_MEM;
-    trace_data.err_message = "System memory error.";
+    trace_data.err_message = "System memory error. Response for page content.";
     pthread_mutex_unlock(&trace_data.lock);
-    return;
+    return NULL;
   }
 
   // build URL for page content
@@ -468,17 +479,30 @@ static void get_page_content(char* page_title, PageData* page_data) {
   const char *error_ptr = cJSON_GetErrorPtr();
   if (error_ptr != NULL) {
     fprintf(stderr, "cJSON parse failed. Error before: %s\n", error_ptr);
+    fflush(stderr);
     pthread_mutex_lock(&trace_data.lock);
     trace_data.trace_complete = 1;
     trace_data.status = ERROR_PARSE;
     trace_data.err_message = "JSON parse error. Quit to see error message.";
     pthread_mutex_unlock(&trace_data.lock);
     cJSON_Delete(json_data);
-    return;
+    return NULL;
   }
 
+  // extract content
+  cJSON* query = cJSON_GetObjectItem(json_data, "query");
+  cJSON* pages = cJSON_GetObjectItem(query, "pages");
+  cJSON* pages_element = cJSON_GetArrayItem(pages, 0);
+  cJSON* pages_extract = cJSON_GetObjectItem(pages_element, "extract");
+  char* extract = strdup(pages_extract->valuestring);
 
+  // free json data
+  free(json_data);
 
+  // free heap allocated data
+  free(page_response.data);
+
+  return extract;
 }
 
 
@@ -518,39 +542,54 @@ void* run_trace(void* args) {
   pthread_mutex_unlock(&trace_data.lock);
 
   PageData curr_page;
-  PageData dest_page;
+  int status;
+  int trace_complete;
 
   // get start page links
-  get_page_links(start_page_title, &curr_page);
-
-  // evaluate curr page for dest page title
-  evaluate_page(&curr_page);
-
-  // check if dest on start and end if so
-  int trace_complete;
-  pthread_mutex_lock(&trace_data.lock);
-  trace_complete = trace_data.trace_complete;
-  pthread_mutex_unlock(&trace_data.lock);
-  if (trace_complete) { return NULL; }
-
-  // get dest page content
-  get_page_content(dest_page_title, &dest_page);
-
-  // leave if encountered errors
-  int status;
+  get_page_links(&curr_page, start_page_title);
   pthread_mutex_lock(&trace_data.lock);
   status = trace_data.status;
   pthread_mutex_unlock(&trace_data.lock);
   if (status != 0) { return NULL; }
 
+  // set destination title in tracer module
+  set_dest_page_title(dest_page_title);
+
+  // evaluate curr page for dest page title
+  evaluate_page(&curr_page);
+
+  // check if dest page was on start page and end if so
+  pthread_mutex_lock(&trace_data.lock);
+  trace_complete = trace_data.trace_complete;
+  pthread_mutex_unlock(&trace_data.lock);
+  if (trace_complete) { return NULL; }
+
+
+  //
+  // everything above here in working order
+  //
+
+
+  // set dest page content
+  pthread_mutex_lock(&trace_data.lock);
+  status = trace_data.status;
+  pthread_mutex_unlock(&trace_data.lock);
+  if (status != 0) { return NULL; }
+  set_dest_page_content(get_page_content(dest_page_title));
+
   return NULL;
 
-  // set destination info in tracer module
-  set_dest_page(&dest_page);
- 
+  // leave before looping if encountered errors
+  pthread_mutex_lock(&trace_data.lock);
+  status = trace_data.status;
+  pthread_mutex_unlock(&trace_data.lock);
+  if (status != 0) { return NULL; }
+
   // while destination page not found
   while (trace_complete == 0) {
     get_links_intros(&curr_page);
+
+    return NULL;
 
     score_intros(&curr_page);
 
@@ -560,7 +599,7 @@ void* run_trace(void* args) {
 
     free_page_data(&curr_page);
 
-    get_page_links(next_page, &curr_page);
+    get_page_links(&curr_page, next_page);
 
     evaluate_page(&curr_page);
 
