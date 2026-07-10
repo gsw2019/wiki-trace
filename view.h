@@ -119,7 +119,7 @@ void update_trace_history();
 
 // functions concerened with starting, pausing, or stopping the trace
 static void init_trace_verification();
-static int peek_worker_status();
+static int peek_worker_status(int status);
 static void show_start_message();
 static void start_trace();
 

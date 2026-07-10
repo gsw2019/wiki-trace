@@ -361,10 +361,9 @@ static void init_trace_verification() {
  * Continuously checks struct shared with worker to see if its completed. Wrapped in
  * mutex where it is called.
  */
-static int peek_worker_status() {
-  pthread_mutex_lock(&trace_data.lock);
+static int peek_worker_status(int status) {
 
-  switch (trace_data.status) {
+  switch (status) {
     case ERROR_INPUT: case ERROR_PARSE: case ERROR_EXISTENCE: case ERROR_MEM: case ERROR_FILE:
       trace_data.status = 0;
       WindowProps* history = &trace_windows.hist_text_field;
@@ -377,8 +376,6 @@ static int peek_worker_status() {
       pthread_mutex_unlock(&trace_data.lock);
       return 1;
   }
-
-  pthread_mutex_unlock(&trace_data.lock);
 
   return 0;
 }
@@ -781,7 +778,7 @@ static void show_trace() {
         break;
     }
 
-    // capture and reset statu vars
+    // capture and reset trace status vars
     pthread_mutex_lock(&trace_data.lock);
     init_complete = trace_data.init_complete;
     trace_data.init_complete = 0;
@@ -798,7 +795,7 @@ static void show_trace() {
 
     // check every 100ms to see if verification worker finished
     if (init_complete == 1) {
-      if (peek_worker_status() == 0) {
+      if (peek_worker_status(status) == 0) {
         show_start_message();
         continue;
       }
@@ -820,7 +817,7 @@ static void show_trace() {
 
     // check every 100ms to see if trace worker finished
     if (trace_complete == 1) {
-      peek_worker_status();
+      peek_worker_status(status);
     }
   }
 }
