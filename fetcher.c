@@ -522,7 +522,7 @@ char* get_page_content(char* page_title) {
  *
  * 
  */
-void make_links_data_req(PageData* page_data, char* curr_titles, int curr_titles_len) {
+void make_links_data_req(PageData* page_data, char* curr_titles) {
   // initialize struct to hold response data
   Response page_response = { .data = malloc(1), .size = 0 };
   if (page_response.data == NULL) {
@@ -654,7 +654,7 @@ static void get_links_data(PageData* page_data) {
       // get rid of trailing '|'
       curr_titles[curr_titles_len - 1] = '\0';
 
-      make_links_data_req(page_data, curr_titles, curr_titles_len);
+      make_links_data_req(page_data, curr_titles);
 
       // reset titles string
       curr_titles[0] = '\0';
@@ -663,7 +663,7 @@ static void get_links_data(PageData* page_data) {
   }
 
   if (strlen(curr_titles) != 0) {
-    make_links_data_req(page_data, curr_titles, curr_titles_len);
+    make_links_data_req(page_data, curr_titles);
   }
 }
 
