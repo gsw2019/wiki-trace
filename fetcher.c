@@ -22,6 +22,8 @@ URLParts url_parts;   // the url pieces needed for requests
 
 FILE* error_file;
 
+FILE* file;
+
 
 /*
  * Initialize curl and URL pieces required for our requests.
@@ -29,6 +31,8 @@ FILE* error_file;
  * @return a handle to curl object
  */
 CURL* init_curl() {
+  file = fopen("output.txt", "w");
+
   error_file = fopen("error_output.txt", "w");
 
   curl = curl_easy_init();
@@ -264,7 +268,7 @@ static void parse_links(cJSON* json_data, PageData* page_data) {
     // increase size if we dont have room
     if (count >= capacity) {
       capacity *= 2;
-      char** temp = realloc(page_data->links, capacity * sizeof(char*));
+      char** temp = realloc(page_data->links_titles, capacity * sizeof(char*));
       if (temp == NULL) {
         pthread_mutex_lock(&trace_data.lock);
         trace_data.trace_complete = 1;
@@ -276,7 +280,7 @@ static void parse_links(cJSON* json_data, PageData* page_data) {
       }
 
       page_data->capacity_links = capacity;
-      page_data->links = temp;
+      page_data->links_titles = temp;
     }
 
     // get array element with link info
@@ -288,8 +292,8 @@ static void parse_links(cJSON* json_data, PageData* page_data) {
 
     // allocate mem for individual title
     cJSON* link = cJSON_GetObjectItem(links_element, "title");
-    page_data->links[count] = malloc(strlen(link->valuestring) + 1);
-    if (page_data->links[count] == NULL) {
+    page_data->links_titles[count] = malloc(strlen(link->valuestring) + 1);
+    if (page_data->links_titles[count] == NULL) {
       pthread_mutex_lock(&trace_data.lock);
       trace_data.trace_complete = 1;
       trace_data.status = ERROR_MEM;
@@ -300,7 +304,7 @@ static void parse_links(cJSON* json_data, PageData* page_data) {
     }
 
     // copy string into allocated mem
-    strcpy(page_data->links[count], link->valuestring);
+    strcpy(page_data->links_titles[count], link->valuestring);
 
     /* fprintf(file, "%s\n", link->valuestring); */
 
@@ -317,10 +321,10 @@ static void parse_links(cJSON* json_data, PageData* page_data) {
  * @param page_title: title of page to get links of
  * @param curr_page: struct to write page data to
  */
-static void get_page_links(PageData* page_data, char* page_title) {
+static void get_page_links(PageData* page_data) {
   // initialize struct to hold response data
-  Response page_response = { .data = malloc(1), .size = 0 };
-  if (page_response.data == NULL) {
+  Response response = { .data = malloc(1), .size = 0 };
+  if (response.data == NULL) {
     pthread_mutex_lock(&trace_data.lock);
     trace_data.trace_complete = 1;
     trace_data.status = ERROR_MEM;
@@ -331,11 +335,10 @@ static void get_page_links(PageData* page_data, char* page_title) {
   }
 
   // initialize struct to hold page data
-  page_data->title = page_title;
-  page_data->links = malloc(INIT_DATA_ARRAY_SIZE * sizeof(char*));
+  page_data->links_titles = malloc(INIT_DATA_ARRAY_SIZE * sizeof(char*));
   page_data->num_links = 0;
   page_data->capacity_links = INIT_DATA_ARRAY_SIZE;
-  if (page_data->links == NULL) {
+  if (page_data->links_titles == NULL) {
     pthread_mutex_lock(&trace_data.lock);
     trace_data.trace_complete = 1;
     trace_data.status = ERROR_MEM;
@@ -347,7 +350,7 @@ static void get_page_links(PageData* page_data, char* page_title) {
 
   // build URL for page links
   char url_page_links[URL_LEN] = {0};
-  char* url_page_title = curl_easy_escape(curl, page_title, 0);
+  char* url_page_title = curl_easy_escape(curl, page_data->title, 0);
   strcat(url_page_links, url_parts.links_start);
   strcat(url_page_links, url_page_title);
   strcat(url_page_links, url_parts.links_end);
@@ -355,11 +358,11 @@ static void get_page_links(PageData* page_data, char* page_title) {
   // request all links on page
   curl_easy_setopt(curl, CURLOPT_URL, url_page_links);
   curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
-  curl_easy_setopt(curl, CURLOPT_WRITEDATA, &page_response);
+  curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
   curl_easy_perform(curl);
 
   // check for parse error
-  cJSON* json_data = cJSON_Parse(page_response.data);
+  cJSON* json_data = cJSON_Parse(response.data);
   const char *error_ptr = cJSON_GetErrorPtr();
   if (error_ptr != NULL) {
     fprintf(error_file, "cJSON parse failed. Page links parse error. Error before: %s\n", error_ptr);
@@ -383,75 +386,70 @@ static void get_page_links(PageData* page_data, char* page_title) {
   pthread_mutex_unlock(&trace_data.lock);
   if (err != 0) { return; }
 
-  // check if has continue flag
-  if (cJSON_GetObjectItem(json_data, "continue") != NULL) {
+  // check for continue flag
+  cJSON* cont_string_obj;
+  cJSON* cont = cJSON_GetObjectItem(json_data, "continue");
 
-    int cont_request = 1;
-    cJSON *cont, *cont_string_obj;
+  while (cont) {
+    // get continue data
+    cont = cJSON_GetObjectItem(json_data, "continue");
+    cont_string_obj = cJSON_GetObjectItem(cont, "plcontinue");
+    char* cont_string = cont_string_obj->valuestring;
 
-    while (cont_request) {
-      // get continue data
-      cont = cJSON_GetObjectItem(json_data, "continue");
-      cont_string_obj = cJSON_GetObjectItem(cont, "plcontinue");
-      char* cont_string = cont_string_obj->valuestring;
+    // clear response for next request
+    free(response.data);
+    response.data = malloc(1);
+    response.size = 0;
 
-      // clear response for next request
-      free(page_response.data);
-      page_response.data = malloc(1);
-      page_response.size = 0;
+    // build continue URL
+    char continue_url[URL_LEN] = {0};
+    char* url_cont_string = curl_easy_escape(curl, cont_string, 0);
+    strcat(continue_url, url_parts.links_cont_start);
+    strcat(continue_url, url_page_title);
+    strcat(continue_url, url_parts.links_cont_mid);
+    strcat(continue_url, url_cont_string);
 
-      // build continue URL
-      char continue_url[URL_LEN] = {0};
-      char* url_cont_string = curl_easy_escape(curl, cont_string, 0);
-      strcat(continue_url, url_parts.links_cont_start);
-      strcat(continue_url, url_page_title);
-      strcat(continue_url, url_parts.links_cont_mid);
-      strcat(continue_url, url_cont_string);
+    // make request
+    curl_easy_setopt(curl, CURLOPT_URL, continue_url);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
+    curl_easy_perform(curl);
 
-      // make request
-      curl_easy_setopt(curl, CURLOPT_URL, continue_url);
-      curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
-      curl_easy_setopt(curl, CURLOPT_WRITEDATA, &page_response);
-      curl_easy_perform(curl);
-
-      // check for parse error
-      json_data = cJSON_Parse(page_response.data);
-      const char *error_ptr = cJSON_GetErrorPtr();
-      if (error_ptr != NULL) {
-        fprintf(error_file, "cJSON parse failed. Page links parse error. Error before: %s\n", error_ptr);
-        fflush(error_file);
-        pthread_mutex_lock(&trace_data.lock);
-        trace_data.trace_complete = 1;
-        trace_data.status = ERROR_PARSE;
-        trace_data.err_message = "Page links parse error. Check error file to see error message.";
-        pthread_mutex_unlock(&trace_data.lock);
-        cJSON_Delete(json_data);
-        return;
-      }
-
-      // extract links
-      parse_links(json_data, page_data);
-
-      // leave if encountered errors
-      int err;
+    // check for parse error
+    json_data = cJSON_Parse(response.data);
+    const char *error_ptr = cJSON_GetErrorPtr();
+    if (error_ptr != NULL) {
+      fprintf(error_file, "cJSON parse failed. Page links parse error. Error before: %s\n", error_ptr);
+      fflush(error_file);
       pthread_mutex_lock(&trace_data.lock);
-      err = trace_data.status;
+      trace_data.trace_complete = 1;
+      trace_data.status = ERROR_PARSE;
+      trace_data.err_message = "Page links parse error. Check error file to see error message.";
       pthread_mutex_unlock(&trace_data.lock);
-      if (err != 0) { return; }
-
-      // check if has continue flag
-      cont = cJSON_GetObjectItem(json_data, "continue");
-      if (cont != NULL) { continue; }
-
-      cont_request = 0;
+      cJSON_Delete(json_data);
+      return;
     }
 
-    // free json data
-    free(json_data);
+    // extract links
+    parse_links(json_data, page_data);
 
-    // free heap allocated data after last use
-    free(page_response.data);
+    // leave if encountered errors
+    int err;
+    pthread_mutex_lock(&trace_data.lock);
+    err = trace_data.status;
+    pthread_mutex_unlock(&trace_data.lock);
+    if (err != 0) { return; }
+
+    // check if has continue flag
+    cont = cJSON_GetObjectItem(json_data, "continue");
+    if (cont == NULL) { break; }
   }
+
+  // free json data
+  cJSON_Delete(json_data);
+
+  // free heap allocated data after last use
+  free(response.data);
 }
 
 
@@ -510,7 +508,7 @@ char* get_page_content(char* page_title) {
   char* extract = strdup(pages_extract->valuestring);
 
   // free json data
-  free(json_data);
+  cJSON_Delete(json_data);
 
   // free heap allocated data
   free(page_response.data);
@@ -520,53 +518,153 @@ char* get_page_content(char* page_title) {
 
 
 /*
- * Gets the intros for pages by looping over titles of links
+ * Make and continue requests for link data
+ *
+ * 
+ */
+void make_links_data_req(PageData* page_data, char* curr_titles, int curr_titles_len) {
+  // initialize struct to hold response data
+  Response page_response = { .data = malloc(1), .size = 0 };
+  if (page_response.data == NULL) {
+    pthread_mutex_lock(&trace_data.lock);
+    trace_data.trace_complete = 1;
+    trace_data.status = ERROR_MEM;
+    trace_data.err_message = "System memory error.\n"
+                             "Mallocing data field in Response struct for links data.";
+    pthread_mutex_unlock(&trace_data.lock);
+    return;
+  }
+
+  fprintf(file, "%s\n", curr_titles);
+  fflush(file);
+
+  // build URL for page content
+  char* url_links_data;
+  char* url_page_titles = curl_easy_escape(curl, curr_titles,0);
+  url_links_data = malloc(strlen(url_parts.intro_start) + strlen(url_page_titles) + strlen(url_parts.intro_end));
+
+  url_links_data[0] = '\0';
+  strcat(url_links_data, url_parts.intro_start);
+  strcat(url_links_data, url_page_titles);
+  strcat(url_links_data, url_parts.intro_end);
+
+  // request page content
+  curl_easy_setopt(curl, CURLOPT_URL, url_links_data);
+  curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
+  curl_easy_setopt(curl, CURLOPT_WRITEDATA, &page_response);
+  curl_easy_perform(curl);
+
+  fprintf(file, "%s\n", page_response.data);
+  fflush(file);
+
+  // check for parse error
+  cJSON* json_data = cJSON_Parse(page_response.data);
+  const char *error_ptr = cJSON_GetErrorPtr();
+  if (error_ptr != NULL) {
+    fprintf(error_file, "cJSON parse failed. Error before: %s\n", error_ptr);
+    fflush(error_file);
+    pthread_mutex_lock(&trace_data.lock);
+    trace_data.trace_complete = 1;
+    trace_data.status = ERROR_PARSE;
+    trace_data.err_message = "Links intros parse error. Check error file to see error message.";
+    pthread_mutex_unlock(&trace_data.lock);
+    cJSON_Delete(json_data);
+    return;
+  }
+
+  // get intro extract from json object
+  cJSON* query = cJSON_GetObjectItem(json_data, "query");
+  cJSON* pages = cJSON_GetObjectItem(query, "pages");
+  int len = cJSON_GetArraySize(pages);
+
+  for (int i=0; i < len; i++) {
+    cJSON* page_element = cJSON_GetArrayItem(pages, i);
+
+    // check if has extract in this round
+    cJSON* page_extract = cJSON_GetObjectItem(page_element, "extract");
+    if (page_extract != NULL) {
+      page_data->links_data[page_data->num_links_data] = cJSON_Duplicate(page_element, 1);
+      page_data->num_links_data++;
+    }
+  }
+
+  // check for continue flag
+  cJSON* cont_string_obj;
+  cJSON* cont = cJSON_GetObjectItem(json_data, "continue");
+
+  while (cont != NULL) {
+    // TODO
+  }
+ 
+  free(page_response.data);
+}
+
+
+/*
+ * Gets the intros for pages by looping over titles of links. Storing the entire cJSON object
+ * from the response. Contains page title + data. Not relying on parallelization with
+ * links titles array.
  *
  * @param page_data: struct containing links to get intros for
  */
-static void get_links_intros(PageData* page_data) {
+static void get_links_data(PageData* page_data) {
+  // initialize links data array to be same size as num of links
+  page_data->num_links_data = 0;
+  page_data->links_data = malloc(page_data->num_links * sizeof(cJSON*));
+  if (page_data->links_data == NULL) {
+    pthread_mutex_lock(&trace_data.lock);
+    trace_data.trace_complete = 1;
+    trace_data.status = ERROR_MEM;
+    trace_data.err_message = "System memory error.\n"
+                             "Mallocing array for links data in PageData struct";
+    pthread_mutex_unlock(&trace_data.lock);
+    return;
+  }
+
+  char* curr_titles = NULL;
+  int curr_titles_len = 0;
+  int link_count = 0;
+
   for (int i=0; i < page_data->num_links; i++) {
-    // initialize struct to hold response data
-    Response page_response = { .data = malloc(1), .size = 0 };
-    if (page_response.data == NULL) {
+    // space for title + '|' + '\0'
+    char* temp = realloc(curr_titles, curr_titles_len + strlen(page_data->links_titles[i]) + 2);
+    if (temp == NULL) {
       pthread_mutex_lock(&trace_data.lock);
       trace_data.trace_complete = 1;
       trace_data.status = ERROR_MEM;
-      trace_data.err_message = "System memory error. Data in Response struct for links intros.";
+      trace_data.err_message = "System memory error.\n"
+                               "Reallocing char array for link titles";
       pthread_mutex_unlock(&trace_data.lock);
       return;
     }
+    curr_titles = temp;
 
-    // build URL for page content
-    /* char url_page_content[URL_LEN] = {0}; */
-    /* char* url_page_title = curl_easy_escape(curl, page_title, 0); */
-    /* strcat(url_page_content, url_parts.content_start); */
-    /* strcat(url_page_content, url_page_title); */
-    /* strcat(url_page_content, url_parts.content_end); */
-    /**/
-    /* // request page content */
-    /* curl_easy_setopt(curl, CURLOPT_URL, url_page_content); */
-    /* curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback); */
-    /* curl_easy_setopt(curl, CURLOPT_WRITEDATA, &page_response); */
-    /* curl_easy_perform(curl); */
-    /**/
-    /* // check for parse error */
-    /* cJSON* json_data = cJSON_Parse(page_response.data); */
-    /* const char *error_ptr = cJSON_GetErrorPtr(); */
-    /* if (error_ptr != NULL) { */
-    /*   fprintf(stderr, "cJSON parse failed. Error before: %s\n", error_ptr); */
-    /*   fflush(stderr); */
-    /*   pthread_mutex_lock(&trace_data.lock); */
-    /*   trace_data.trace_complete = 1; */
-    /*   trace_data.status = ERROR_PARSE; */
-    /*   trace_data.err_message = "JSON parse error. Quit to see error message."; */
-    /*   pthread_mutex_unlock(&trace_data.lock); */
-    /*   cJSON_Delete(json_data); */
-    /*   return NULL; */
-    /* } */
+    // pntr addition to get end of current titles string
+    // copy next title there
+    memcpy(curr_titles + curr_titles_len, page_data->links_titles[i], strlen(page_data->links_titles[i]));
+    curr_titles_len += strlen(page_data->links_titles[i]);
+
+    // add delimiter and null term
+    curr_titles[curr_titles_len++] = '|';
+    curr_titles[curr_titles_len] = '\0';
+    link_count++;
+
+
+    if (link_count % 50 == 0) {
+      // get rid of trailing '|'
+      curr_titles[curr_titles_len - 1] = '\0';
+
+      make_links_data_req(page_data, curr_titles, curr_titles_len);
+
+      // reset titles string
+      curr_titles[0] = '\0';
+      curr_titles_len = 0;
+    }
   }
 
-  
+  if (strlen(curr_titles) != 0) {
+    make_links_data_req(page_data, curr_titles, curr_titles_len);
+  }
 }
 
 
@@ -607,8 +705,11 @@ void* run_trace(void* args) {
   int status;
   int trace_complete;
 
+  // set curr page title
+  curr_page.title = start_page_title;
+
   // get start page links
-  get_page_links(&curr_page, start_page_title);
+  get_page_links(&curr_page);
   pthread_mutex_lock(&trace_data.lock);
   status = trace_data.status;
   pthread_mutex_unlock(&trace_data.lock);
@@ -644,7 +745,16 @@ void* run_trace(void* args) {
     //
 
 
-    get_links_intros(&curr_page);
+    get_links_data(&curr_page);
+    pthread_mutex_lock(&trace_data.lock);
+    status = trace_data.status;
+    pthread_mutex_unlock(&trace_data.lock);
+    if (status != 0) { return NULL; }
+
+    /* for (int i = 0; i < curr_page.num_links; i++) { */
+    /*   fprintf(file, "%s\n\n", curr_page.links_data[i]); */
+    /* } */
+    /* fflush(file); */
 
     return NULL;
 
@@ -656,7 +766,9 @@ void* run_trace(void* args) {
 
     free_page_data(&curr_page);
 
-    get_page_links(&curr_page, next_page);
+    curr_page.title = next_page;
+
+    get_page_links(&curr_page);
 
     evaluate_page(&curr_page);
 
@@ -668,5 +780,4 @@ void* run_trace(void* args) {
 
   return NULL;
 }
-
 

@@ -191,8 +191,6 @@ void set_dest_page_content(char* page_content) {
     pthread_mutex_unlock(&trace_data.lock);
     return;
   }
-
-  hash_table_print(destination_page.content_tf, file);
 }
 
 
@@ -227,7 +225,7 @@ void evaluate_page(PageData* page_data) {
   pthread_mutex_lock(&trace_data.lock);
 
   for (int i=0; i < page_data->num_links; i++) {
-    if (strcmp(page_data->links[i], destination_page.title) == 0) {
+    if (strcmp(page_data->links_titles[i], destination_page.title) == 0) {
       trace_data.trace_complete = 1;
       trace_data.trace_successful = 1;
       trace_data.num_pages_traveled++;

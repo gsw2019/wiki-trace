@@ -47,9 +47,10 @@ typedef struct {
 typedef struct {
   char* title;
   char* content;
-  char** links;
-  char** links_intros;
+  char** links_titles;
+  cJSON** links_data;
   int num_links;
+  int num_links_data;
   int capacity_links;
 } PageData;
 
@@ -66,10 +67,13 @@ void* verify_pages(void* args);
 static int check_page_exists(char* page_data);
 
 // getting pages info
-static void get_page_links(PageData* page_data, char* page_title);
+static void get_page_links(PageData* page_data);
 char* get_page_content(char* page_title);
 static void parse_links(cJSON* json_data, PageData* page_data);
-static void get_links_intros(PageData* page_data);
+static void get_links_data(PageData* page_data);
+static void make_links_data_req(PageData* page_data, char* curr_titles, int curr_titles_len);
+
+// freeing data
 static void free_page_data(PageData* page_data);
 
 // logic of trace
