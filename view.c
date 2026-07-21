@@ -362,19 +362,18 @@ static void init_trace_verification() {
  * mutex where it is called.
  */
 static int peek_worker_status(int status) {
-
-  switch (status) {
-    case ERROR_INPUT: case ERROR_PARSE: case ERROR_EXISTENCE: case ERROR_MEM: case ERROR_FILE:
-      trace_data.status = 0;
-      WindowProps* history = &trace_windows.hist_text_field;
-      wclear(history->window);
-      mvwprintw(history->window, 1, history->write_col, "%s", trace_data.err_message);
-      prefresh(history->window,
-               history->min_row, history->min_col,
-               history->view_top, history->view_left,
-               history->view_bot, history->view_right);
-      pthread_mutex_unlock(&trace_data.lock);
-      return 1;
+  if (status != 0) {
+    pthread_mutex_lock(&trace_data.lock);
+    trace_data.status = 0;
+    WindowProps* history = &trace_windows.hist_text_field;
+    wclear(history->window);
+    mvwprintw(history->window, 1, history->write_col, "%s", trace_data.err_message);
+    prefresh(history->window,
+             history->min_row, history->min_col,
+             history->view_top, history->view_left,
+             history->view_bot, history->view_right);
+    pthread_mutex_unlock(&trace_data.lock);
+    return 1;
   }
 
   return 0;
@@ -424,6 +423,9 @@ static void start_trace() {
  */
 static void read_user_input(int page, WindowProps* text_field) {
   keypad(text_field->window, TRUE);
+
+  // unfocus history window if it was focused
+  focus_window(&trace_windows.hist_window, false);
 
   // change border color to show avtive window
   if (page == 1) { focus_window(&trace_windows.spage_window, true); }
@@ -513,7 +515,10 @@ static void update_text_field(WindowProps* text_field, int index) {
   }
 
   wmove(text_field->window, 0, index);
-  prefresh(text_field->window, text_field->min_row, new_min_col, text_field->view_top, text_field->view_left, text_field->view_bot, text_field->view_right);
+  prefresh(text_field->window,
+           text_field->min_row, new_min_col,
+           text_field->view_top, text_field->view_left,
+           text_field->view_bot, text_field->view_right);
 }
 
 
@@ -744,12 +749,10 @@ static void show_trace() {
         break;
       case 'f':
       case 'F':
-        focus_window(&trace_windows.hist_window, false);
         read_user_input(1, spage_text_field);
         break;
       case 't':
       case 'T':
-        focus_window(&trace_windows.hist_window, false);
         read_user_input(2, dpage_text_field);
         break;
       case 'b':

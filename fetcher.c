@@ -14,11 +14,31 @@
 #include "fetcher.h"
 #include "tracer.h"
 #include "cJSON.h"
+#include "utils.h"
+#include "view.h"
 
 
 CURL* curl;   // handle used in all fetching/crawling
 
-URLParts url_parts;   // the url pieces needed for requests
+URLParts url_parts = {
+  .verify_start = "https://en.wikipedia.org/w/api.php?action=query&format=json&prop=&titles=",
+  .verify_end   = "&formatversion=2",
+
+  .links_start = "https://en.wikipedia.org/w/api.php?action=query&format=json&prop=links&titles=",
+  .links_end   = "&formatversion=2&pllimit=max",
+
+  .links_cont_start = "https://en.wikipedia.org/w/api.php?action=query&format=json&prop=links&continue=%7C%7C&titles=",
+  .links_cont_mid   = "&formatversion=2&pllimit=max&plcontinue=",
+
+  .intro_start = "https://en.wikipedia.org/w/api.php?action=query&format=json&prop=extracts&titles=",
+  .intro_end   = "&formatversion=2&exintro=1&explaintext=1",
+
+  .intro_cont_start = "https://en.wikipedia.org/w/api.php?action=query&format=json&prop=extracts&continue=%7C%7C&titles=",
+  .intro_cont_mid   = "&formatversion=2&exintro=1&explaintext=1&excontinue=",
+
+  .content_start = "https://en.wikipedia.org/w/api.php?action=query&format=json&prop=extracts&titles=",
+  .content_end   = "&formatversion=2&explaintext=1"
+};
 
 FILE* error_file;
 
@@ -38,21 +58,6 @@ CURL* init_curl() {
   curl = curl_easy_init();
   curl_easy_setopt(curl, CURLOPT_USERAGENT, "wiki-trace project (wsg2026@outlook.com)");
 
-  url_parts.verify_start = "https://en.wikipedia.org/w/api.php?action=query&format=json&prop=&titles=";
-  url_parts.verify_end = "&formatversion=2";
-
-  url_parts.links_start = "https://en.wikipedia.org/w/api.php?action=query&format=json&prop=links&titles=";
-  url_parts.links_end = "&formatversion=2&pllimit=max";
-
-  url_parts.links_cont_start = "https://en.wikipedia.org/w/api.php?action=query&format=json&prop=links&continue=%7C%7C&titles=";
-  url_parts.links_cont_mid = "&formatversion=2&pllimit=max&plcontinue=";
-
-  url_parts.intro_start = "https://en.wikipedia.org/w/api.php?action=query&format=json&prop=extracts&titles=";
-  url_parts.intro_end = "&formatversion=2&exintro=1&explaintext=1";
-
-  url_parts.content_start = "https://en.wikipedia.org/w/api.php?action=query&format=json&prop=extracts&titles=";
-  url_parts.content_end = "&formatversion=2&explaintext=1";
-
   return curl;
 }
 
@@ -68,6 +73,10 @@ CURL* init_curl() {
 size_t write_callback(void *ptr, size_t size, size_t nmemb, Response *res) {
   size_t new_size = res->size + nmemb;    // increase size by adding size of retrieved data
   res->data = realloc(res->data, new_size + 1);
+  if (res->data == NULL) {
+    LOG_ERROR(ERROR_REALLOC, NULL, NULL);
+    return 0;
+  }
   memcpy(res->data + res->size, ptr, nmemb);    // pointer addition to get destination for new data
   res->size = new_size;
   res->data[res->size] = '\0';    // size as index, puts null term correctly
@@ -80,18 +89,18 @@ size_t write_callback(void *ptr, size_t size, size_t nmemb, Response *res) {
  * Checks response data to see if the Wikipedia page exists
  *
  * @param page_data: string of json data from response
+ * @param page_title: title of wikipedia page
  * @return 0: page exists
- * @return ERROR_PARSE: jsom parse error
+ * @return ERROR_PARSE: json parse error
  * @return ERROR_EXISTENCE: page is missing
  */
-static int check_page_exists(char* page_data) {
+static void check_page_exists(char* page_data, char* page_title) {
   cJSON* json_data = cJSON_Parse(page_data);
   const char *error_ptr = cJSON_GetErrorPtr();
-  if (error_ptr != NULL) { 
-    fprintf(error_file, "cJSON parse failed. Verify page parse error. Error before: %s\n", error_ptr);
-    fflush(error_file);
+  if (error_ptr != NULL) {
+    LOG_ERROR(ERROR_CJSON_PARSE, error_ptr, page_data);
     cJSON_Delete(json_data);
-    return ERROR_PARSE;
+    return;
   }
 
   // walk down JSON object
@@ -101,13 +110,12 @@ static int check_page_exists(char* page_data) {
   cJSON* missing = cJSON_GetObjectItem(first_page, "missing");
 
   if (missing != NULL) {
+    LOG_ERROR(ERROR_PAGE_EXISTENCE, NULL, page_title);
     cJSON_Delete(json_data);
-    return ERROR_EXISTENCE;
+    return;
   }
 
   cJSON_Delete(json_data);
-
-  return 0;
 }
 
 
@@ -117,22 +125,20 @@ static int check_page_exists(char* page_data) {
  * @param args: NULL, using global state var trace_data in worker
  */
 void* verify_pages(void* args) {
-  // if missing one or both titles, return err value
   pthread_mutex_lock(&trace_data.lock);
-  if (strlen(trace_data.start_page) == 0 || strlen(trace_data.dest_page) == 0) {
-    trace_data.init_complete = 1;
-    trace_data.status = ERROR_INPUT;
-    trace_data.err_message = "Missing page titles. Please enter two Wikipedia pages.";
-    pthread_mutex_unlock(&trace_data.lock);
-    return NULL;
-  }
+  char* start_page_title = strdup(trace_data.start_page);
+  char* dest_page_title = strdup(trace_data.dest_page);
   pthread_mutex_unlock(&trace_data.lock);
 
+  // if missing one or both titles, return err value
+  if (strlen(start_page_title) == 0 || strlen(dest_page_title) == 0) {
+    LOG_ERROR(ERROR_USER_INPUT, NULL, NULL);
+    return NULL;
+  }
+
   // turn user input into URL style params
-  pthread_mutex_lock(&trace_data.lock);
-  char* start_page = curl_easy_escape(curl, trace_data.start_page, 0);
-  char* dest_page = curl_easy_escape(curl, trace_data.dest_page, 0);
-  pthread_mutex_unlock(&trace_data.lock);
+  char* start_page = curl_easy_escape(curl, start_page_title, 0);
+  char* dest_page = curl_easy_escape(curl, dest_page_title, 0);
 
   // build URLs
   char url_start_page[URL_LEN] = {0};
@@ -148,12 +154,7 @@ void* verify_pages(void* args) {
   // make requests
   Response start_page_resp = { .data = malloc(1), .size = 0 };
   if (start_page_resp.data == NULL) {
-    pthread_mutex_lock(&trace_data.lock);
-    trace_data.init_complete = 1;
-    trace_data.status = ERROR_MEM;
-    trace_data.err_message = "System memory error.\n"
-                             "Mallocing data field in Response struct for start page.";
-    pthread_mutex_unlock(&trace_data.lock);
+    LOG_ERROR(ERROR_MALLOC, NULL, NULL);
     return NULL;
   }
   curl_easy_setopt(curl, CURLOPT_URL, url_start_page);
@@ -163,12 +164,7 @@ void* verify_pages(void* args) {
 
   Response dest_page_resp = { .data = malloc(1), .size = 0 };
   if (dest_page_resp.data == NULL) {
-    pthread_mutex_lock(&trace_data.lock);
-    trace_data.init_complete = 1;
-    trace_data.status = ERROR_MEM;
-    trace_data.err_message = "System memory error.\n"
-                             "Mallocing data field in Response struct for destination page.";
-    pthread_mutex_unlock(&trace_data.lock);
+    LOG_ERROR(ERROR_MALLOC, NULL, NULL);
     return NULL;
   }
   curl_easy_setopt(curl, CURLOPT_URL, url_dest_page);
@@ -176,71 +172,15 @@ void* verify_pages(void* args) {
   curl_easy_setopt(curl, CURLOPT_WRITEDATA, &dest_page_resp);
   curl_easy_perform(curl);
 
-  // check start page status
-  int start_page_status = check_page_exists(start_page_resp.data);
-
-  if (start_page_status == ERROR_PARSE) {
-    pthread_mutex_lock(&trace_data.lock);
-    trace_data.init_complete = 1;
-    trace_data.status = ERROR_PARSE;
-    trace_data.err_message = "Start page parse error. Check error file to see error message.";
-    pthread_mutex_unlock(&trace_data.lock);
-
-    free(start_page_resp.data);
-    free(dest_page_resp.data);
-
-    return NULL;
-  }
-  else if (start_page_status == ERROR_EXISTENCE) {
-    pthread_mutex_lock(&trace_data.lock);
-    trace_data.init_complete = 1;
-    trace_data.status = ERROR_EXISTENCE;
-    trace_data.err_message = "Start page does not exists. Make sure to enter the page title\n"
-                              "exactly as it appears on Wikipedia. Copy and paste is acceptable.";
-    pthread_mutex_unlock(&trace_data.lock);
-
-    free(start_page_resp.data);
-    free(dest_page_resp.data);
-
-    return NULL;
-  }
-
-  // check dest page status
-  int dest_page_status = check_page_exists(dest_page_resp.data);
-
-  if (dest_page_status == ERROR_PARSE) {
-    pthread_mutex_lock(&trace_data.lock);
-    trace_data.init_complete = 1;
-    trace_data.status = ERROR_PARSE;
-    trace_data.err_message = "Destination page parse error. Check error file to see error\n"
-                             "message.";
-    pthread_mutex_unlock(&trace_data.lock);
-
-    free(start_page_resp.data);
-    free(dest_page_resp.data);
-
-    return NULL;
-  }
-  else if (dest_page_status == ERROR_EXISTENCE) {
-    pthread_mutex_lock(&trace_data.lock);
-    trace_data.init_complete = 1;
-    trace_data.status = ERROR_EXISTENCE;
-    trace_data.err_message = "Dest page does not exists. Make sure to enter the page title\n"
-                              "exactly as it appears on Wikipedia. Copy and paste is acceptable.";
-    pthread_mutex_unlock(&trace_data.lock);
-
-    free(start_page_resp.data);
-    free(dest_page_resp.data);
-
-    return NULL;
-  }
+  // check user input pages status
+  check_page_exists(start_page_resp.data, start_page_title); 
+  check_page_exists(dest_page_resp.data, dest_page_title);
 
   free(start_page_resp.data);
   free(dest_page_resp.data);
 
   pthread_mutex_lock(&trace_data.lock);
   trace_data.init_complete = 1;
-  trace_data.status = 0;
   pthread_mutex_unlock(&trace_data.lock);
 
   return NULL;
@@ -270,12 +210,7 @@ static void parse_links(cJSON* json_data, PageData* page_data) {
       capacity *= 2;
       char** temp = realloc(page_data->links_titles, capacity * sizeof(char*));
       if (temp == NULL) {
-        pthread_mutex_lock(&trace_data.lock);
-        trace_data.trace_complete = 1;
-        trace_data.status = ERROR_MEM;
-        trace_data.err_message = "System memory error.\n"
-                                 "Reallocing memory for page link titles array in PageData struct";
-        pthread_mutex_unlock(&trace_data.lock);
+        LOG_ERROR(ERROR_REALLOC, NULL, NULL);
         return;
       }
 
@@ -294,12 +229,7 @@ static void parse_links(cJSON* json_data, PageData* page_data) {
     cJSON* link = cJSON_GetObjectItem(links_element, "title");
     page_data->links_titles[count] = malloc(strlen(link->valuestring) + 1);
     if (page_data->links_titles[count] == NULL) {
-      pthread_mutex_lock(&trace_data.lock);
-      trace_data.trace_complete = 1;
-      trace_data.status = ERROR_MEM;
-      trace_data.err_message = "System memory error.\n"
-                               "Mallocing memory for a page link title element in PageData struct";
-      pthread_mutex_unlock(&trace_data.lock);
+      LOG_ERROR(ERROR_MALLOC, NULL, NULL);
       return;
     }
 
@@ -325,12 +255,7 @@ static void get_page_links(PageData* page_data) {
   // initialize struct to hold response data
   Response response = { .data = malloc(1), .size = 0 };
   if (response.data == NULL) {
-    pthread_mutex_lock(&trace_data.lock);
-    trace_data.trace_complete = 1;
-    trace_data.status = ERROR_MEM;
-    trace_data.err_message = "System memory error.\n"
-                             "Mallocing data field in Response struct for page links";
-    pthread_mutex_unlock(&trace_data.lock);
+    LOG_ERROR(ERROR_MALLOC, NULL, NULL);
     return;
   }
 
@@ -339,12 +264,7 @@ static void get_page_links(PageData* page_data) {
   page_data->num_links = 0;
   page_data->capacity_links = INIT_DATA_ARRAY_SIZE;
   if (page_data->links_titles == NULL) {
-    pthread_mutex_lock(&trace_data.lock);
-    trace_data.trace_complete = 1;
-    trace_data.status = ERROR_MEM;
-    trace_data.err_message = "System memory error.\n"
-                             "Mallocing link titles array in PageData struct for page links";
-    pthread_mutex_unlock(&trace_data.lock);
+    LOG_ERROR(ERROR_MALLOC, NULL, NULL);
     return;
   }
 
@@ -365,13 +285,7 @@ static void get_page_links(PageData* page_data) {
   cJSON* json_data = cJSON_Parse(response.data);
   const char *error_ptr = cJSON_GetErrorPtr();
   if (error_ptr != NULL) {
-    fprintf(error_file, "cJSON parse failed. Page links parse error. Error before: %s\n", error_ptr);
-    fflush(error_file);
-    pthread_mutex_lock(&trace_data.lock);
-    trace_data.trace_complete = 1;
-    trace_data.status = ERROR_PARSE;
-    trace_data.err_message = "Page links parse error. Check error file to see error message.";
-    pthread_mutex_unlock(&trace_data.lock);
+    LOG_ERROR(ERROR_CJSON_PARSE, error_ptr, NULL);
     cJSON_Delete(json_data);
     return;
   }
@@ -419,13 +333,7 @@ static void get_page_links(PageData* page_data) {
     json_data = cJSON_Parse(response.data);
     const char *error_ptr = cJSON_GetErrorPtr();
     if (error_ptr != NULL) {
-      fprintf(error_file, "cJSON parse failed. Page links parse error. Error before: %s\n", error_ptr);
-      fflush(error_file);
-      pthread_mutex_lock(&trace_data.lock);
-      trace_data.trace_complete = 1;
-      trace_data.status = ERROR_PARSE;
-      trace_data.err_message = "Page links parse error. Check error file to see error message.";
-      pthread_mutex_unlock(&trace_data.lock);
+      LOG_ERROR(ERROR_CJSON_PARSE, error_ptr, NULL);
       cJSON_Delete(json_data);
       return;
     }
@@ -463,12 +371,7 @@ char* get_page_content(char* page_title) {
   // initialize struct to hold response data
   Response page_response = { .data = malloc(1), .size = 0 };
   if (page_response.data == NULL) {
-    pthread_mutex_lock(&trace_data.lock);
-    trace_data.trace_complete = 1;
-    trace_data.status = ERROR_MEM;
-    trace_data.err_message = "System memory error.\n" 
-                             "Mallocing data field in Response struct for page content.";
-    pthread_mutex_unlock(&trace_data.lock);
+    LOG_ERROR(ERROR_MALLOC, NULL, NULL);
     return NULL;
   }
 
@@ -489,13 +392,7 @@ char* get_page_content(char* page_title) {
   cJSON* json_data = cJSON_Parse(page_response.data);
   const char *error_ptr = cJSON_GetErrorPtr();
   if (error_ptr != NULL) {
-    fprintf(error_file, "cJSON parse failed. Error before: %s\n", error_ptr);
-    fflush(error_file);
-    pthread_mutex_lock(&trace_data.lock);
-    trace_data.trace_complete = 1;
-    trace_data.status = ERROR_PARSE;
-    trace_data.err_message = "Page content parse error. Check error file to see error message.";
-    pthread_mutex_unlock(&trace_data.lock);
+    LOG_ERROR(ERROR_CJSON_PARSE, error_ptr, page_response.data);
     cJSON_Delete(json_data);
     return NULL;
   }
@@ -526,12 +423,7 @@ void make_links_data_req(PageData* page_data, char* curr_titles) {
   // initialize struct to hold response data
   Response page_response = { .data = malloc(1), .size = 0 };
   if (page_response.data == NULL) {
-    pthread_mutex_lock(&trace_data.lock);
-    trace_data.trace_complete = 1;
-    trace_data.status = ERROR_MEM;
-    trace_data.err_message = "System memory error.\n"
-                             "Mallocing data field in Response struct for links data.";
-    pthread_mutex_unlock(&trace_data.lock);
+    LOG_ERROR(ERROR_MALLOC, NULL, NULL);
     return;
   }
 
@@ -542,6 +434,9 @@ void make_links_data_req(PageData* page_data, char* curr_titles) {
   char* url_links_data;
   char* url_page_titles = curl_easy_escape(curl, curr_titles,0);
   url_links_data = malloc(strlen(url_parts.intro_start) + strlen(url_page_titles) + strlen(url_parts.intro_end));
+  if (url_links_data == NULL) {
+    LOG_ERROR(ERROR_MALLOC, NULL, NULL);
+  }
 
   url_links_data[0] = '\0';
   strcat(url_links_data, url_parts.intro_start);
@@ -561,13 +456,7 @@ void make_links_data_req(PageData* page_data, char* curr_titles) {
   cJSON* json_data = cJSON_Parse(page_response.data);
   const char *error_ptr = cJSON_GetErrorPtr();
   if (error_ptr != NULL) {
-    fprintf(error_file, "cJSON parse failed. Error before: %s\n", error_ptr);
-    fflush(error_file);
-    pthread_mutex_lock(&trace_data.lock);
-    trace_data.trace_complete = 1;
-    trace_data.status = ERROR_PARSE;
-    trace_data.err_message = "Links intros parse error. Check error file to see error message.";
-    pthread_mutex_unlock(&trace_data.lock);
+    LOG_ERROR(ERROR_CJSON_PARSE, error_ptr, page_response.data);
     cJSON_Delete(json_data);
     return;
   }
@@ -612,12 +501,7 @@ static void get_links_data(PageData* page_data) {
   page_data->num_links_data = 0;
   page_data->links_data = malloc(page_data->num_links * sizeof(cJSON*));
   if (page_data->links_data == NULL) {
-    pthread_mutex_lock(&trace_data.lock);
-    trace_data.trace_complete = 1;
-    trace_data.status = ERROR_MEM;
-    trace_data.err_message = "System memory error.\n"
-                             "Mallocing array for links data in PageData struct";
-    pthread_mutex_unlock(&trace_data.lock);
+    LOG_ERROR(ERROR_MALLOC, NULL, NULL);
     return;
   }
 
@@ -629,12 +513,7 @@ static void get_links_data(PageData* page_data) {
     // space for title + '|' + '\0'
     char* temp = realloc(curr_titles, curr_titles_len + strlen(page_data->links_titles[i]) + 2);
     if (temp == NULL) {
-      pthread_mutex_lock(&trace_data.lock);
-      trace_data.trace_complete = 1;
-      trace_data.status = ERROR_MEM;
-      trace_data.err_message = "System memory error.\n"
-                               "Reallocing char array for link titles";
-      pthread_mutex_unlock(&trace_data.lock);
+      LOG_ERROR(ERROR_REALLOC, NULL, NULL);
       return;
     }
     curr_titles = temp;
@@ -689,17 +568,15 @@ void* run_trace(void* args) {
   char* start_page_title = strdup(trace_data.start_page);
   char* dest_page_title = strdup(trace_data.dest_page);
   trace_data.pages_traveled = malloc(INIT_DATA_ARRAY_SIZE * sizeof(char*));
-  if (trace_data.pages_traveled == NULL) {
-    trace_data.trace_complete = 1;
-    trace_data.status = ERROR_MEM;
-    trace_data.err_message = "System memory error.\n"
-                             "Mallocing pages traveled array in TraceData struct for run trace.";
-    pthread_mutex_unlock(&trace_data.lock);
-    return NULL;
-  }
+  char** temp = trace_data.pages_traveled;
   trace_data.pages_traveled[0] = strdup(trace_data.start_page);
   trace_data.num_pages_traveled++;
   pthread_mutex_unlock(&trace_data.lock);
+
+  if (temp == NULL) {
+    LOG_ERROR(ERROR_MALLOC, NULL, NULL);
+    return NULL;
+  }
 
   PageData curr_page;
   int status;

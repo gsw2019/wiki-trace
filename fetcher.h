@@ -17,26 +17,22 @@
 
 #define URL_LEN              500
 
-#define ERROR_MEM            1
-#define ERROR_INPUT          2
-#define ERROR_PARSE          3
-#define ERROR_EXISTENCE      4
-#define ERROR_FILE           5
-
 #define INIT_DATA_ARRAY_SIZE 2
 
 
 typedef struct {
-  char* verify_start;
-  char* verify_end;
-  char* links_start;
-  char* links_end;
-  char* links_cont_start;
-  char* links_cont_mid;
-  char* intro_start;
-  char* intro_end;
-  char* content_start;
-  char* content_end;
+  const char* verify_start;
+  const char* verify_end;
+  const char* links_start;
+  const char* links_end;
+  const char* links_cont_start;
+  const char* links_cont_mid;
+  const char* intro_start;
+  const char* intro_end;
+  const char* intro_cont_start;
+  const char* intro_cont_mid;
+  const char* content_start;
+  const char* content_end;
 } URLParts;
 
 typedef struct {
@@ -64,7 +60,7 @@ static size_t write_callback(void *ptr, size_t size, size_t nmemb, Response *res
 
 // verifying pages input by user
 void* verify_pages(void* args);
-static int check_page_exists(char* page_data);
+static void check_page_exists(char* page_data, char* page_title);
 
 // getting pages info
 static void get_page_links(PageData* page_data);
@@ -79,6 +75,5 @@ static void free_page_data(PageData* page_data);
 // logic of trace
 void* run_trace(void* args);
 
-
-
 #endif
+

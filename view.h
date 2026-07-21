@@ -19,10 +19,6 @@
 #define AUTHOR_WIN_WIDTH       75
 #define MENU_WIN_HEIGHT        10
 #define MENU_WIN_WIDTH         75
-#define OPT_START_TRACE        0
-#define OPT_SETTINGS           1
-#define OPT_ABOUT              2
-#define OPT_EXIT               3
 
 #define TRACE_WIN_HEIGHT       40
 #define TRACE_WIN_WIDTH        85
@@ -40,6 +36,9 @@
 #define ABOUT_PAD_ROWS         100
 #define ABOUT_PAD_COLS         75
 
+
+// menu choices
+enum MenuOpt { OPT_START_TRACE, OPT_SETTINGS, OPT_ABOUT, OPT_EXIT };
 
 // tracks all properties that a window might have
 typedef struct {

@@ -11,9 +11,13 @@
 
 #include "view.h"
 #include "fetcher.h"
+#include "utils.h"
 
 
 int main(int argc, char* argv[]) {
+  // initialize utilities
+  init_utils(); 
+
   // initialize curl
   CURL* curl = init_curl();
 

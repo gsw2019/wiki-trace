@@ -15,6 +15,7 @@
 #include "fetcher.h"
 #include "hash_table.h"
 #include "stmr.h"
+#include "utils.h"
 
 
 DestPage destination_page;
@@ -83,7 +84,10 @@ char* clean_term(char* token) {
  */
 HashTable* compute_term_freq(char* string) {
   HashTable* ht = calloc(1, sizeof(HashTable));
-  if (ht == NULL) { return NULL; } 
+  if (ht == NULL) {
+    LOG_ERROR(ERROR_CALLOC, NULL, NULL);
+    return NULL;
+  }
 
   // make mutable array for tokenization
   char str_arr[strlen(string) + 1];
@@ -137,13 +141,10 @@ HashTable* compute_term_freq(char* string) {
  * file for each evaluation of a word.
  */
 void init_stopwords() {
-  stop_words_file = fopen("EN_stopwords.txt", "r");
+  char* stopwords_file_name = "EN_stopwords.txt";
+  stop_words_file = fopen(stopwords_file_name ,"r");
   if (stop_words_file == NULL) {
-    pthread_mutex_lock(&trace_data.lock);
-    trace_data.trace_complete = 1;
-    trace_data.status = ERROR_FILE;
-    trace_data.err_message = "Opening file error. Reading EN stop words";
-    pthread_mutex_unlock(&trace_data.lock);
+    LOG_ERROR(ERROR_FILE, NULL, stopwords_file_name);
     return;
   }
 
@@ -183,14 +184,7 @@ void set_dest_page_content(char* page_content) {
   if (status) { return; }
 
   destination_page.content_tf = compute_term_freq(destination_page.content);
-  if (destination_page.content_tf == NULL) {
-    pthread_mutex_lock(&trace_data.lock);
-    trace_data.trace_complete = 1;
-    trace_data.status = ERROR_MEM;
-    trace_data.err_message = "System memory error. Destination page tf hash table initialization."; 
-    pthread_mutex_unlock(&trace_data.lock);
-    return;
-  }
+  if (destination_page.content_tf == NULL) { return; }
 }
 
 
@@ -222,30 +216,29 @@ char* get_next_page() {
  * @param page_data: struct with current pages title and links
  */
 void evaluate_page(PageData* page_data) {
-  pthread_mutex_lock(&trace_data.lock);
 
   for (int i=0; i < page_data->num_links; i++) {
     if (strcmp(page_data->links_titles[i], destination_page.title) == 0) {
+      pthread_mutex_lock(&trace_data.lock);
       trace_data.trace_complete = 1;
       trace_data.trace_successful = 1;
       trace_data.num_pages_traveled++;
+      pthread_mutex_unlock(&trace_data.lock);
 
       // add dest page to list of traveled pages
       char** temp = realloc(trace_data.pages_traveled, trace_data.num_pages_traveled * sizeof(char*));
       if (temp == NULL) {
-        trace_data.status = ERROR_MEM;
-        trace_data.err_message = "System memory error. Adding destination page to pages traveled";
-        pthread_mutex_unlock(&trace_data.lock);
+        LOG_ERROR(ERROR_REALLOC, NULL, NULL);
         return;
       }
+
+      pthread_mutex_lock(&trace_data.lock);
       trace_data.pages_traveled = temp;
       trace_data.pages_traveled[trace_data.num_pages_traveled - 1] = strdup(destination_page.title);
-
       pthread_mutex_unlock(&trace_data.lock);
+
       return;
     }
   }
-
-  pthread_mutex_unlock(&trace_data.lock);
 }
 
