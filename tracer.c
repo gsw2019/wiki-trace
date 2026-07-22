@@ -33,7 +33,7 @@ FILE* file;
  * @param page_title: title of page which is the destination page
  */
 void set_dest_page_title(char* page_title) {
-  file = fopen("output.txt", "w");
+  /* file = fopen("output.txt", "w"); */
 
   destination_page.title = strdup(page_title); 
 }

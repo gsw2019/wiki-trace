@@ -16,7 +16,7 @@
 
 int main(int argc, char* argv[]) {
   // initialize utilities
-  init_utils(); 
+  init_utils();
 
   // initialize curl
   CURL* curl = init_curl();

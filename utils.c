@@ -53,9 +53,9 @@ void log_error(const char* func, int line, ErrTag tag, const char* error_ptr, vo
       fprintf(err_file, "\n%s\n", delim);
       fprintf(err_file, "%s\n", "CJSON PARSE ERROR");
       fprintf(err_file, "Error in: %s, line %d\n", func, line);
-      fprintf(err_file, "Error pointer: %s", error_ptr);
-      if (specifier != NULL) { fprintf(err_file, "Error specifier: %s", (char*) specifier); }
-      fprintf(err_file, "%s", delim);
+      fprintf(err_file, "Error pointer: %s\n", error_ptr);
+      if (specifier != NULL) { fprintf(err_file, "Error specifier: %s\n", (char*) specifier); }
+      fprintf(err_file, "%s\n", delim);
       fflush(err_file);
       fclose(err_file);
       break;
@@ -99,7 +99,7 @@ void log_error(const char* func, int line, ErrTag tag, const char* error_ptr, vo
       fprintf(err_file, "%s\n", "FILE ERROR"); 
       fprintf(err_file, "Error in: %s, line %d\n", func, line);
       if (specifier != NULL) { fprintf(err_file, "%s\n", (char*) specifier); }
-      fprintf(err_file, "%s", delim);
+      fprintf(err_file, "%s\n", delim);
       fflush(err_file);
       fclose(err_file);
       break;
