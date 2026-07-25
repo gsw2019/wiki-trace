@@ -12,7 +12,7 @@
 #include <stdio.h>
 
 
-#define SIZE  1031
+#define NUM_BUCKETS  1031
 #define PRIME 37
 
 
@@ -24,7 +24,7 @@ typedef struct Node {
 
 
 typedef struct {
-  Node* buckets[SIZE];
+  Node* buckets[NUM_BUCKETS];
   int size;
 } HashTable;
 

@@ -10,6 +10,7 @@
 #include <string.h>
 #include <ctype.h>
 #include <stdlib.h>
+#include <math.h>
 
 #include "tracer.h"
 #include "fetcher.h"
@@ -24,19 +25,9 @@ HashTable ht_stopwords;
 
 FILE* stop_words_file;
 
+char** pages_visited;
+
 FILE* file;
-
-
-/*
- * Set destination page title
- *
- * @param page_title: title of page which is the destination page
- */
-void set_dest_page_title(char* page_title) {
-  /* file = fopen("output.txt", "w"); */
-
-  destination_page.title = strdup(page_title); 
-}
 
 
 /*
@@ -44,26 +35,28 @@ void set_dest_page_title(char* page_title) {
  *
  * @param token: term to be cleaned
  */
-char* clean_term(char* token) {
+char* clean_term(char* token)
+{
   char* dest = token;
   char* src = token;
 
-  while (*src) {
+  while (*src)
+  {
     // skip char
     // ctype.h functions expect unsigned char
-    if (ispunct((unsigned char) *src)) {
-      src++;
-    }
+    if (ispunct((unsigned char) *src)) { src++; }
 
     // make lower and append
-    else if (isupper((unsigned char) *src)) {
+    else if (isupper((unsigned char) *src))
+    {
       *dest = tolower((unsigned char) *src);
       src++;
       dest++;
     }
 
     // equal chars
-    else {
+    else
+    {
       *dest = *src;
       src++;
       dest++;
@@ -82,9 +75,11 @@ char* clean_term(char* token) {
  * @param string: the string to compute frequencies for
  * @return a hash table of term frequencies
  */
-HashTable* compute_term_freq(char* string) {
+HashTable* compute_term_freq(char* string) 
+{
   HashTable* ht = calloc(1, sizeof(HashTable));
-  if (ht == NULL) {
+  if (ht == NULL)
+  {
     LOG_ERROR(ERROR_CALLOC, NULL, NULL);
     return NULL;
   }
@@ -95,12 +90,14 @@ HashTable* compute_term_freq(char* string) {
 
   // loop through terms
   char* token = strtok(str_arr, DELIMITERS);
-  while (token) {
+  while (token)
+  {
     // clean term
     char* clean_token = clean_term(token);
 
     // empty string
-    if (!(*clean_token)) {
+    if (!(*clean_token))
+    {
       token = strtok(NULL, DELIMITERS);
       continue;
     }
@@ -112,24 +109,38 @@ HashTable* compute_term_freq(char* string) {
     stemmed_token[end + 1] = '\0';
 
     // continue if a stop word
-    if (hash_table_get(&ht_stopwords, stemmed_token) != -1) {
+    if (hash_table_get(&ht_stopwords, stemmed_token) != -1)
+    {
       token = strtok(NULL, DELIMITERS);
       continue;
     }
 
     // not in hash table
     // add it
-    else if (hash_table_get(ht, stemmed_token) == -1) {
-      hash_table_add(ht,stemmed_token, 1);
-    }
+    else if (hash_table_get(ht, stemmed_token) == -1) { hash_table_add(ht,stemmed_token, 1); }
 
     // in hash table, update frequency
-    else {
+    else
+    {
       double old_val = hash_table_get(ht, stemmed_token);
       hash_table_set(ht, stemmed_token, ++old_val);
     }
 
     token = strtok(NULL, DELIMITERS);
+  }
+
+  // iterate over all hash table entries and log10() their tf
+  for (int i = 0; i < NUM_BUCKETS; i++) 
+  {
+    if (ht->buckets[i]) 
+    {
+      Node* node = ht->buckets[i];
+      while (node) 
+      {
+        node->value = log10(node->value);
+        node = node->next;
+      }
+    }
   }
 
   return ht;
@@ -140,24 +151,28 @@ HashTable* compute_term_freq(char* string) {
  * Reads stop words into a hash table for quick lookup. Avoids opening and closing a
  * file for each evaluation of a word.
  */
-void init_stopwords() {
+void init_stopwords()
+{
   char* stopwords_file_name = "EN_stopwords.txt";
   stop_words_file = fopen(stopwords_file_name ,"r");
-  if (stop_words_file == NULL) {
+  if (stop_words_file == NULL)
+  {
     LOG_ERROR(ERROR_FILE, NULL, stopwords_file_name);
     return;
   }
 
   char* stop_word = NULL;
   size_t len = 0;
-  while (getline(&stop_word, &len, stop_words_file) != -1) {
+  while (getline(&stop_word, &len, stop_words_file) != -1)
+  {
     // string complentary span
     // return number of chars before first char in second param
     // since using as index, willl make that char a null terminator
     stop_word[strcspn(stop_word, DELIMITERS)] = '\0';
 
     // add word if not in table
-    if (hash_table_get(&ht_stopwords, stop_word) == -1) {
+    if (hash_table_get(&ht_stopwords, stop_word) == -1)
+    {
       hash_table_add(&ht_stopwords, stop_word, 1.0);
     }
   }
@@ -171,8 +186,9 @@ void init_stopwords() {
  * Set destination page content
  *
  * @param page_content: content of page which is the destination page
- */
-void set_dest_page_content(char* page_content) {
+ */ 
+void set_dest_page_content(char* page_content)
+{
   int status;
 
   destination_page.content = strdup(page_content);
@@ -189,13 +205,17 @@ void set_dest_page_content(char* page_content) {
 
 
 /*
- * Performs scoring on the paage intros using the TF of their intros and the
- * TF of the destination pages inro
+ * Performs scoring on the page links using the TF of their intros and the TF of the
+ * destination pages intro. Only keeps track of the top score.
  *
  * @param page_data: struct with current pages links' titles and intros
  */
-void score_intros(PageData* page_data) {
-  // TODO
+void score_intros(PageData* page_data)
+{
+  fprintf(file, "in score_intros\n");
+  fprintf(file, "num page links: %d\n", page_data->num_links);
+  fprintf(file, "num links data: %d\n", page_data->num_links_data);
+  fflush(file);
 }
 
 
@@ -204,8 +224,8 @@ void score_intros(PageData* page_data) {
  *
  * @return a page title
  */
-char* get_next_page() {
-
+char* get_next_page()
+{
   return "temp";
 }
 
@@ -215,10 +235,12 @@ char* get_next_page() {
  *
  * @param page_data: struct with current pages title and links
  */
-void evaluate_page(PageData* page_data) {
-
-  for (int i=0; i < page_data->num_links; i++) {
-    if (strcmp(page_data->links_titles[i], destination_page.title) == 0) {
+void evaluate_page(PageData* page_data)
+{
+  for (int i=0; i < page_data->num_links; i++)
+  {
+    if (strcmp(page_data->links_titles[i], destination_page.title) == 0)
+    {
       pthread_mutex_lock(&trace_data.lock);
       trace_data.trace_complete = 1;
       trace_data.trace_successful = 1;
@@ -227,7 +249,8 @@ void evaluate_page(PageData* page_data) {
 
       // add dest page to list of traveled pages
       char** temp = realloc(trace_data.pages_traveled, trace_data.num_pages_traveled * sizeof(char*));
-      if (temp == NULL) {
+      if (temp == NULL)
+      {
         LOG_ERROR(ERROR_REALLOC, NULL, NULL);
         return;
       }
@@ -240,5 +263,24 @@ void evaluate_page(PageData* page_data) {
       return;
     }
   }
+}
+
+
+/*
+ * Set up things the tracer will have to utilize
+ */
+void init_tracer(char* page_title)
+{
+  file = fopen("output.txt", "w");
+  if (file == NULL) {
+    perror("fopen");
+    exit(EXIT_FAILURE);
+  }
+
+  destination_page.title = strdup(page_title); 
+
+  init_stopwords();
+
+  pages_visited = malloc(INIT_DATA_ARRAY_SIZE * sizeof(char*));
 }
 

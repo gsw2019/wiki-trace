@@ -23,8 +23,10 @@ typedef struct {
 } DestPage;
 
 
+// initialize tracer
+void init_tracer(char* page_title);
+
 // funcs to set destination page info
-void set_dest_page_title(char* page_title);
 void set_dest_page_content(char* page_content);
 
 // funcs to clean terms and compute frequencies

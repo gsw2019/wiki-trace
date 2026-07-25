@@ -8,7 +8,6 @@
 #ifndef FETCHER_H
 #define FETCHER_H
 
-
 #include <curl/curl.h>
 
 #include "view.h"
@@ -36,7 +35,7 @@ typedef struct {
 } URLParts;
 
 typedef struct {
-  char *data;
+  char* data;
   size_t size;
 } Response;
 
@@ -62,15 +61,20 @@ static size_t write_callback(void *ptr, size_t size, size_t nmemb, Response *res
 void* verify_pages(void* args);
 static void check_page_exists(char* page_data, char* page_title);
 
-// getting pages info
-static void get_page_links(PageData* page_data);
-char* get_page_content(char* page_title);
-static void parse_links(cJSON* json_data, PageData* page_data);
-static void get_links_data(PageData* page_data);
-static void make_links_data_req(PageData* page_data, char* curr_titles);
+// getting pages links
+static void get_page_links();
+static void parse_links(cJSON* json_data);
+
+// getting pages links data
+static void get_links_data();
+static void make_links_data_req(char* curr_titles);
+static void parse_links_data(cJSON* json_data);
+
+// getting page content
+static char* get_page_content(char* page_title);
 
 // freeing data
-static void free_page_data(PageData* page_data);
+static void free_page_data();
 
 // logic of trace
 void* run_trace(void* args);

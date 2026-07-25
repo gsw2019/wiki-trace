@@ -27,7 +27,7 @@ unsigned int hash(char* key) {
     key++;
   }
 
-  int index = h % SIZE;
+  int index = h % NUM_BUCKETS;
 
   return index;
 }
@@ -145,7 +145,7 @@ int hash_table_set(HashTable* ht, char* key, double new_val) {
  */
 void hash_table_print(HashTable* ht, FILE* file) {
   // go through each bucket
-  for (int i=0; i < SIZE; i++) {
+  for (int i=0; i < NUM_BUCKETS; i++) {
     Node* curr_node = ht->buckets[i];
 
     if (curr_node == NULL) { continue; }

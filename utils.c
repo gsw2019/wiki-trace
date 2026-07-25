@@ -6,6 +6,7 @@
 
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "utils.h"
@@ -42,6 +43,11 @@ void log_error(const char* func, int line, ErrTag tag, const char* error_ptr, vo
   err_file = fopen("error_output_wt.txt", "w");
 
   switch (tag) {
+
+    //
+    // Errors parsing fetched data should stop execution. The prograam will eventually encounter
+    // an issue and crash if the JSON data is not correctly parsed and stored
+    //
     case ERROR_CJSON_PARSE:
       pthread_mutex_lock(&trace_data.lock);
       trace_data.trace_complete = 1;
@@ -58,8 +64,13 @@ void log_error(const char* func, int line, ErrTag tag, const char* error_ptr, vo
       fprintf(err_file, "%s\n", delim);
       fflush(err_file);
       fclose(err_file);
+
+      exit(EXIT_FAILURE);
       break;
 
+    //
+    // Can continue execution for this error case
+    //
     case ERROR_USER_INPUT:
       pthread_mutex_lock(&trace_data.lock);
       trace_data.trace_complete = 1;
@@ -68,25 +79,34 @@ void log_error(const char* func, int line, ErrTag tag, const char* error_ptr, vo
       pthread_mutex_unlock(&trace_data.lock);
       break;
 
-    // used for start and dest pages
+    //
+    // Can continue execution for this error case
+    //
     case ERROR_PAGE_EXISTENCE:
       pthread_mutex_lock(&trace_data.lock);
       trace_data.trace_complete = 1;
       trace_data.status = ERROR_PAGE_EXISTENCE;
-      if ( (char*)specifier == trace_data.start_page ) {
+      if ( (char*)specifier == trace_data.start_page )
+      {
         trace_data.err_message = "Start page does not exists. Make sure to enter the page title\n"
                                  "exactly as it appears on Wikipedia. Copy and paste is acceptable.";
       }
-      else if ( (char*)specifier == trace_data.dest_page ) {
+      else if ( (char*)specifier == trace_data.dest_page )
+      {
         trace_data.err_message = "Dest page does not exists. Make sure to enter the page title\n"
                                  "exactly as it appears on Wikipedia. Copy and paste is acceptable.";
       }
-      else {
+      else
+      {
         trace_data.err_message = "Unknown page does not exist";
       }
       pthread_mutex_unlock(&trace_data.lock);
       break;
 
+    //
+    // This case will pop if the stopword file encountered an error. Execution could theoretically
+    // be continued, the tracer algorithm will just be significantly impacted
+    //
     case ERROR_FILE:
       pthread_mutex_lock(&trace_data.lock);
       trace_data.trace_complete = 1;
@@ -104,15 +124,20 @@ void log_error(const char* func, int line, ErrTag tag, const char* error_ptr, vo
       fclose(err_file);
       break;
 
+
+    //
+    // Memory related cases are probably best handled by safely exiting the program after
+    // logging the error. No need to continue the program because if its a memory error, 
+    // its pretty much guarunteed to crash.
+    //
     case ERROR_MALLOC:
     case ERROR_REALLOC:
     case ERROR_CALLOC:
       pthread_mutex_lock(&trace_data.lock);
-      trace_data.init_complete = 1;
+      trace_data.trace_complete = 1;
       if (tag == ERROR_MALLOC) { trace_data.status = ERROR_MALLOC; }
       else if (tag == ERROR_REALLOC) { trace_data.status = ERROR_REALLOC; }
       else if (tag == ERROR_CALLOC) { trace_data.status = ERROR_CALLOC; }
-      trace_data.status = ERROR_MALLOC;
       trace_data.err_message = "System memory error.";
       pthread_mutex_unlock(&trace_data.lock);
 
@@ -122,9 +147,11 @@ void log_error(const char* func, int line, ErrTag tag, const char* error_ptr, vo
       else if (tag == ERROR_REALLOC) { fprintf(err_file, "%s\n", "REALLOC ERROR"); }
       else if (tag == ERROR_CALLOC) { fprintf(err_file, "%s\n", "CALLOC ERROR"); }
       fprintf(err_file, "Error in: %s, line %d\n", func, line);
-      fprintf(err_file, "%s", delim);
+      fprintf(err_file, "%s\n", delim);
       fflush(err_file);
       fclose(err_file);
+
+      exit(EXIT_FAILURE);
       break;
 
     default:
