@@ -179,10 +179,8 @@ static void show_menu()
       show_about();
       return;
     case OPT_EXIT:
-      clear();
-      refresh();
       endwin();
-      return;
+      exit(EXIT_SUCCESS);
   }
 }
 
@@ -824,10 +822,6 @@ static void show_trace()
         return;
       case 'q':
       case 'Q':
-        pthread_mutex_lock(&trace_data.lock);
-        trace_data.quit_request = 1;
-        pthread_mutex_unlock(&trace_data.lock);
-        cleanup_trace_view();
         endwin();
         exit(EXIT_SUCCESS);
       default:

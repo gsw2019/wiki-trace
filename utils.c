@@ -34,23 +34,6 @@ void init_utils()
 
 
 /*
- * Flags for a quit request. Used between fetch and parse operations to kill workers
- * if needed.
- *
- * @return 1 if there is a quit request, 0 otherwise
- */
-int quit_request()
-{
-  pthread_mutex_lock(&trace_data.lock);
-  int quit = trace_data.quit_request;
-  pthread_mutex_unlock(&trace_data.lock);
-
-  return quit;
-}
-
-
-
-/*
  * Generic function called to log errors to text file and set vars in the TraceData global struct
  *
  * @param func: the name of the function that called this function
@@ -60,7 +43,7 @@ int quit_request()
  */
 void log_error(const char* func, int line, ErrTag tag, const char* error_ptr, void* specifier)
 {
-  err_file = fopen("error_output_wt.txt", "w");
+  err_file = fopen("logs_wiki-trace.txt", "w");
 
   switch (tag)
   {

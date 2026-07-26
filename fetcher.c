@@ -483,17 +483,13 @@ static void make_links_data_req(char* curr_titles)
       strcat(url, url_parts.intro_end);
     }
 
-    // check for quit requests before and after curl to safely exit
-    if (quit_request()) { return; }
 
     // request page content
     curl_easy_setopt(curl, CURLOPT_URL, url);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
     curl_easy_perform(curl);
-
-    if (quit_request()) { return; }
-
+ 
     /* fprintf(file, "%s\n", curr_titles); */
     /* fprintf(file, "Response %d:\n %s\n", count, response.data); */
     /* fprintf(file, "\n\n"); */

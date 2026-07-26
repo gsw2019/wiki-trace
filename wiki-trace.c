@@ -25,8 +25,5 @@ int main(int argc, char* argv[]) {
   // launch TUI
   init_view();
 
-  // cleanup
-  curl_easy_cleanup(curl);
-
   return 0;
 }
