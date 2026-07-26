@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <pthread.h>
 
 #include "utils.h"
 #include "fetcher.h"
@@ -21,14 +22,32 @@ char delim[50];
 /*
  * Initialize some vars for other utililities functions
  */
-void init_utils() {
+void init_utils()
+{
   // error log file
-  err_file = fopen("error_output_wt.txt", "w");
+  err_file = fopen("logs_wiki-trace.txt", "w");
 
-  // delimiter to seperate error logs 
+  // delimiter to seperate error logs
   memset(delim, '=', 48);
   delim[49] = '\0';
 }
+
+
+/*
+ * Flags for a quit request. Used between fetch and parse operations to kill workers
+ * if needed.
+ *
+ * @return 1 if there is a quit request, 0 otherwise
+ */
+int quit_request()
+{
+  pthread_mutex_lock(&trace_data.lock);
+  int quit = trace_data.quit_request;
+  pthread_mutex_unlock(&trace_data.lock);
+
+  return quit;
+}
+
 
 
 /*
@@ -39,10 +58,12 @@ void init_utils() {
  * @param tag: the enum describing the type of error
  * @param error_ptr: the pointer to where cJSON parse failed
  */
-void log_error(const char* func, int line, ErrTag tag, const char* error_ptr, void* specifier) {
+void log_error(const char* func, int line, ErrTag tag, const char* error_ptr, void* specifier)
+{
   err_file = fopen("error_output_wt.txt", "w");
 
-  switch (tag) {
+  switch (tag)
+  {
 
     //
     // Errors parsing fetched data should stop execution. The prograam will eventually encounter
@@ -52,7 +73,7 @@ void log_error(const char* func, int line, ErrTag tag, const char* error_ptr, vo
       pthread_mutex_lock(&trace_data.lock);
       trace_data.trace_complete = 1;
       trace_data.status = ERROR_CJSON_PARSE;
-      trace_data.err_message = "cJSON parse error. See error_output_wt.txt file.";
+      trace_data.err_message = "cJSON parse error. See logs_wiki-trace.txt file.";
       pthread_mutex_unlock(&trace_data.lock);
 
       // prints further info to error file
@@ -86,12 +107,12 @@ void log_error(const char* func, int line, ErrTag tag, const char* error_ptr, vo
       pthread_mutex_lock(&trace_data.lock);
       trace_data.trace_complete = 1;
       trace_data.status = ERROR_PAGE_EXISTENCE;
-      if ( (char*)specifier == trace_data.start_page )
+      if ( strcmp((char*)specifier, trace_data.start_page) == 0 )
       {
         trace_data.err_message = "Start page does not exists. Make sure to enter the page title\n"
                                  "exactly as it appears on Wikipedia. Copy and paste is acceptable.";
       }
-      else if ( (char*)specifier == trace_data.dest_page )
+      else if ( strcmp((char*)specifier, trace_data.dest_page) == 0 )
       {
         trace_data.err_message = "Dest page does not exists. Make sure to enter the page title\n"
                                  "exactly as it appears on Wikipedia. Copy and paste is acceptable.";
@@ -111,7 +132,7 @@ void log_error(const char* func, int line, ErrTag tag, const char* error_ptr, vo
       pthread_mutex_lock(&trace_data.lock);
       trace_data.trace_complete = 1;
       trace_data.status = ERROR_FILE;
-      trace_data.err_message = "Opening file error. See error_output_wt.txt file.";
+      trace_data.err_message = "Opening file error. See logs_wiki-trace.txt file.";
       pthread_mutex_unlock(&trace_data.lock);
 
       // prints further info to errorr file

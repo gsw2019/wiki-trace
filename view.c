@@ -50,10 +50,12 @@ AboutWindows about_windows;   // about screen windows
 
 FILE* file;
 
+
 /*
  * Show window for welcome message.
  */
-static void show_welcome() {
+static void show_welcome()
+{
   box(init_windows.welcome_window, 0, 0);
 
   char* welcome_message = "Welcome To The Wikipedia Trace Solver!";
@@ -70,7 +72,8 @@ static void show_welcome() {
 /*
  * Show a window for author.
  */
-static void show_author() {
+static void show_author()
+{
   char* author_tag = "(c) Garret Wilson 2026";
 
   init_pair(1, COLOR_RED, COLOR_BLUE);
@@ -89,21 +92,25 @@ static void show_author() {
  *
  * @param highlighted: value that desscribes which selection the user is hovering on
  */
-static void update_menu(int highlighted) {
+static void update_menu(int highlighted)
+{
   box(init_windows.menu_window, 0, 0);
 
   int x = 2;
   int y = 3;
 
   // draw each menu option
-  for (int i = 0; i < n_choices; i++) {
+  for (int i = 0; i < n_choices; i++)
+  {
     // highlight the option the cursor is on
-    if (highlighted == i + 1) {   // highlighted is 1 indexed
+    if (highlighted == i + 1)   // highlighted is 1 indexed
+    {
       wattron(init_windows.menu_window, A_REVERSE);
       mvwprintw(init_windows.menu_window, y, x, "%s", choices[i]);
       wattroff(init_windows.menu_window, A_REVERSE);
-    } 
-    else {
+    }
+    else
+    {
       mvwprintw(init_windows.menu_window, y, x, "%s", choices[i]);
     }
 
@@ -118,7 +125,8 @@ static void update_menu(int highlighted) {
  * Displays a welcome message and menu that allows the user to make a selection
  * between starting the game, adjusting some settings, showing an about page, or exiting.
  */
-static void show_menu() {
+static void show_menu()
+{
   int highlighted = 1;    // need var for tracking highlighted
   int choice = 0;   // and for when a selection is made
 
@@ -127,10 +135,12 @@ static void show_menu() {
   update_menu(highlighted);    // draw the menu
 
   // determine new state of menu from key press and current selection
-  while (1) {
+  while (1)
+  {
     int c = wgetch(init_windows.menu_window);
 
-    switch(c) {
+    switch(c)
+    {
       case KEY_UP:
 				if(highlighted == 1) { highlighted = n_choices; }
 				else { --highlighted; }
@@ -151,7 +161,8 @@ static void show_menu() {
   }
 
   // determine course of action based on menu choice
-  switch(choice - 1) {
+  switch(choice - 1)
+  {
     case OPT_START_TRACE:
       delwin(init_windows.menu_window);
       delwin(init_windows.author_window);
@@ -179,7 +190,8 @@ static void show_menu() {
 /*
  * Initialize ncurses stdscr window with a welcome, menu, and author acknowledgment.
  */
-void init_view() {
+void init_view()
+{
   clear();
   refresh();
 
@@ -188,10 +200,11 @@ void init_view() {
   initscr();              // begin curses mode
 
   // ensure terminal window size is of minimal compatible dimensions (85x40)
-  if (LINES < 40 || COLS < 85) {
+  if (LINES < 40 || COLS < 85)
+  {
     endwin();
     fprintf(stderr, "Error: terminal window must be at least 85x40 to render wiki-trace\n");
-    exit(1);
+    exit(EXIT_FAILURE);
   }
 
   cbreak();               // allow program interupt signals
@@ -199,7 +212,7 @@ void init_view() {
   start_color();          // enable colors
   use_default_colors();   // keeps user default terminal color scheme or theme
   curs_set(0);            // remove cursor so not dangling after last write
-  
+
   // get center of stdsc for menu
   int menu_start_y = (LINES - MENU_WIN_HEIGHT) / 2;
   int menu_start_x = (COLS - MENU_WIN_WIDTH) / 2;
@@ -224,8 +237,9 @@ void init_view() {
 /*
  * Display the about screen describing the game and how the tracer works.
  */
-static void show_about() {
-  // clear the stdscr so can show new display 
+static void show_about()
+{
+  // clear the stdscr so can show new display
   clear();
   refresh();
 
@@ -259,7 +273,8 @@ static void show_about() {
 
   // write aactual info to the scrollable area
   // TODO
-  for (int i = 0; i < ABOUT_PAD_ROWS; i++) {
+  for (int i = 0; i < ABOUT_PAD_ROWS; i++)
+  {
     mvwprintw(about_text_field->window, i, 1, "here is a temp entery inside this scrollaable area that I want #%d", i + 1);
   }
 
@@ -279,7 +294,8 @@ static void show_about() {
            view_bot, view_right);
 
   // scrollable view of information
-  while (1) {
+  while (1)
+  {
     wrefresh(about_window->window);
     prefresh(about_text_field->window,
              pad_scroll_line, 0,
@@ -287,7 +303,8 @@ static void show_about() {
              view_bot, view_right);
 
     int ch = wgetch(about_window->window);
-    switch(ch) {
+    switch(ch)
+    {
       case KEY_UP:
         if (pad_scroll_line > 0) { pad_scroll_line--; }
         break;
@@ -326,14 +343,11 @@ static void show_about() {
 /*
  * Fill text fields if there is memory for start and destination page.
  */
-static void fill_text_fields() {
+static void fill_text_fields()
+{
   pthread_mutex_lock(&trace_data.lock);
-  if (strlen(trace_data.start_page)) {
-    wprintw(trace_windows.spage_text_field.window, "%s", trace_data.start_page);
-  }
-  if (strlen(trace_data.dest_page)) {
-    wprintw(trace_windows.dpage_text_field.window, "%s", trace_data.dest_page);
-  }
+  if (strlen(trace_data.start_page)) { wprintw(trace_windows.spage_text_field.window, "%s", trace_data.start_page); }
+  if (strlen(trace_data.dest_page)) { wprintw(trace_windows.dpage_text_field.window, "%s", trace_data.dest_page); }
   pthread_mutex_unlock(&trace_data.lock);
 }
 
@@ -341,7 +355,8 @@ static void fill_text_fields() {
 /*
  * Sends of a worker to verify the pages provided exist.
  */
-static void init_trace_verification() {
+static void init_trace_verification()
+{
   pthread_join(worker, NULL);
 
   // show immediate feedback
@@ -361,8 +376,10 @@ static void init_trace_verification() {
  * Continuously checks struct shared with worker to see if its completed. Wrapped in
  * mutex where it is called.
  */
-static int peek_worker_status(int status) {
-  if (status != 0) {
+static int peek_worker_status(int status)
+{
+  if (status != 0)
+  {
     pthread_mutex_lock(&trace_data.lock);
     trace_data.status = 0;
     WindowProps* history = &trace_windows.hist_text_field;
@@ -383,7 +400,8 @@ static int peek_worker_status(int status) {
 /*
  * displays a starting message and starts timer to launch trace
  */
-static void show_start_message() {
+static void show_start_message()
+{
   // write message trace is starting
   WindowProps* history = &trace_windows.hist_text_field;
   wclear(history->window);
@@ -401,7 +419,8 @@ static void show_start_message() {
 /*
  * Sends off a worker to begin the trace and clears the history window
  */
-static void start_trace() {
+static void start_trace()
+{
   pthread_join(worker, NULL);
 
   WindowProps* history = &trace_windows.hist_text_field;
@@ -421,7 +440,8 @@ static void start_trace() {
  * @param page: a flag to know which text field is being written to (1 = spage, 2 = dpage)
  * @param text_field: the window data needed to display and read text from
  */
-static void read_user_input(int page, WindowProps* text_field) {
+static void read_user_input(int page, WindowProps* text_field)
+{
   keypad(text_field->window, TRUE);
 
   // unfocus history window if it was focused
@@ -435,11 +455,13 @@ static void read_user_input(int page, WindowProps* text_field) {
   char text[256] = {0};
   int index;
   pthread_mutex_lock(&trace_data.lock);
-  if (page == 1) {
+  if (page == 1)
+  {
     strcpy(text, trace_data.start_page);
     index = strlen(trace_data.start_page);
   }
-  else {
+  else
+  {
     strcpy(text, trace_data.dest_page);
     index = strlen(trace_data.dest_page);
   }
@@ -449,22 +471,29 @@ static void read_user_input(int page, WindowProps* text_field) {
   wmove(text_field->window, 0, index);
   prefresh(text_field->window, 0, 0, text_field->view_top, text_field->view_left, text_field->view_bot, text_field->view_right);
 
-  while(1) {
+  while(1)
+  {
     int ch = wgetch(text_field->window);
 
     // ASCCII chars
-    if (ch >= 32 && ch <= 126 && index <= 255) {
+    if (ch >= 32 && ch <= 126 && index <= 255)
+    {
       waddch(text_field->window, ch);   // add to text field
       text[index] = ch;    // store it
       index++;    // increment cursor and next spot to fill in buffer
       update_text_field(text_field, index);
     }
     // deleting chars
-    else if ( (ch == KEY_BACKSPACE || ch == 127 || ch == 8) && index >= 0) {
-      if (index == 0) {   // deletes the last char to completely clear text field
+    else if ( (ch == KEY_BACKSPACE || ch == 127 || ch == 8) && index >= 0)
+    {
+      if (index == 0)
+      {   // deletes the last char to completely clear text field
         waddch(text_field->window, ' ');
         wmove(text_field->window, 0, index);
-        prefresh(text_field->window, 0, 0, text_field->view_top, text_field->view_left, text_field->view_bot, text_field->view_right);
+        prefresh(text_field->window,
+                 0, 0,
+                 text_field->view_top, text_field->view_left,
+                 text_field->view_bot, text_field->view_right);
         continue;
       }
       index--;
@@ -473,14 +502,17 @@ static void read_user_input(int page, WindowProps* text_field) {
       update_text_field(text_field, index);
     }
     // user pressed enter
-    else if (ch == 10) {
+    else if (ch == 10)
+    {
       // change window border color
-      if (page == 1) {
+      if (page == 1)
+      {
         focus_window(&trace_windows.spage_window, false);
         update_text_field(text_field, index);
         curs_set(0);
       }
-      else {
+      else
+      {
         focus_window(&trace_windows.dpage_window, false);
         update_text_field(text_field, index);
         curs_set(0);
@@ -504,15 +536,12 @@ static void read_user_input(int page, WindowProps* text_field) {
  * @param text_field: the window data needed to display and read text from
  * @param index: the current index of the cursor and buffer
  */
-static void update_text_field(WindowProps* text_field, int index) {
+static void update_text_field(WindowProps* text_field, int index)
+{
   int new_min_col;
 
-  if (index >= TEXT_WIN_WIDTH - 2) {
-    new_min_col = index - TEXT_WIN_WIDTH + 2;
-  }
-  else {
-    new_min_col = 0;
-  }
+  if (index >= TEXT_WIN_WIDTH - 2) { new_min_col = index - TEXT_WIN_WIDTH + 2; }
+  else { new_min_col = 0; }
 
   wmove(text_field->window, 0, index);
   prefresh(text_field->window,
@@ -525,18 +554,21 @@ static void update_text_field(WindowProps* text_field, int index) {
 /*
  * bring a window into focus by changing its border color
  */
-static void focus_window(WindowProps* window_props, bool focus) {
+static void focus_window(WindowProps* window_props, bool focus)
+{
   // color to draw active window borders
   init_pair(1, COLOR_CYAN, -1);
 
-  if (focus) {
+  if (focus)
+  {
     wattron(window_props->window, COLOR_PAIR(1));
     box(window_props->window, 0, 0);
     mvwprintw(window_props->window, 0, 2, "%s", window_props->title);
     wattroff(window_props->window, COLOR_PAIR(1));
     wrefresh(window_props->window);
   }
-  else {
+  else
+  {
     box(window_props->window, 0, 0);
     mvwprintw(window_props->window, 0, 2, "%s", window_props->title);
     wrefresh(window_props->window);
@@ -547,12 +579,14 @@ static void focus_window(WindowProps* window_props, bool focus) {
 /*
  * Used to update the trace history view
  */
-void update_trace_history() {
+void update_trace_history()
+{
   WindowProps* history = &trace_windows.hist_text_field;
 
   pthread_mutex_lock(&trace_data.lock);
 
-  for (int i = num_pages_displayed; i < trace_data.num_pages_traveled; i++) {
+  for (int i = num_pages_displayed; i < trace_data.num_pages_traveled; i++)
+  {
     mvwprintw(history->window, history->write_row, history->write_col, "%s", trace_data.pages_traveled[i]);
     prefresh(history->window,
            history->min_row, history->min_col,
@@ -561,7 +595,8 @@ void update_trace_history() {
     history->write_row++;
   }
 
-  if (trace_data.trace_complete == 1) {
+  if (trace_data.trace_complete == 1)
+  {
     focus_window(&trace_windows.hist_window, false);
     prefresh(history->window,
            history->min_row, history->min_col,
@@ -576,10 +611,34 @@ void update_trace_history() {
 
 
 /*
+ * Cleanup the trace view
+ */
+static void cleanup_trace_view()
+{
+  WindowProps* main_window = &trace_windows.main_window;
+  WindowProps* spage_window = &trace_windows.spage_window;
+  WindowProps* spage_text_field = &trace_windows.spage_text_field;
+  WindowProps* dpage_window = &trace_windows.dpage_window;
+  WindowProps* dpage_text_field = &trace_windows.dpage_text_field;
+  WindowProps* hist_window = &trace_windows.hist_window;
+  WindowProps* hist_text_field = &trace_windows.hist_text_field;
+
+  delwin(main_window->window);
+  delwin(spage_window->window);
+  delwin(spage_text_field->window);
+  delwin(dpage_window->window);
+  delwin(dpage_text_field->window);
+  delwin(hist_window->window);
+  delwin(hist_window->window);
+}
+
+
+/*
  * Display screen where user will input start page (spage) and destination page (dpage) then initate 
  * the trace. Will also display a live tracing of the pages walked
  */
-static void show_trace() {
+static void show_trace()
+{
   // clear stdscr
   clear();
   refresh();
@@ -671,7 +730,8 @@ static void show_trace() {
   hist_text_field->write_row = 1;
   hist_text_field->write_col = 2;
 
-  for (int i = 0; i < HIST_TEXT_FIELD_HEIGHT; i++) {
+  for (int i = 0; i < HIST_TEXT_FIELD_HEIGHT; i++)
+  {
     mvwprintw(hist_text_field->window, i, 1, "this is entry #%d", i);
   }
 
@@ -726,10 +786,12 @@ static void show_trace() {
   int prev_hops = 0;
   int init_complete, status, num_pages_traveled, trace_complete;
 
-  while (1) {
+  while (1)
+  {
     int ch = wgetch(main_window->window);
 
-    switch(ch) {
+    switch(ch)
+    {
       case 's':
       case 'S':
         focus_window(&trace_windows.hist_window, true);
@@ -757,26 +819,17 @@ static void show_trace() {
         break;
       case 'b':
       case 'B':
-        delwin(main_window->window);
-        delwin(spage_window->window);
-        delwin(spage_text_field->window);
-        delwin(dpage_window->window);
-        delwin(dpage_text_field->window);
-        delwin(hist_window->window);
-        delwin(hist_window->window);
+        cleanup_trace_view();
         init_view();
         return;
       case 'q':
       case 'Q':
-        delwin(main_window->window);
-        delwin(spage_window->window);
-        delwin(spage_text_field->window);
-        delwin(dpage_window->window);
-        delwin(dpage_text_field->window);
-        delwin(hist_window->window);
-        delwin(hist_window->window);
+        pthread_mutex_lock(&trace_data.lock);
+        trace_data.quit_request = 1;
+        pthread_mutex_unlock(&trace_data.lock);
+        cleanup_trace_view();
         endwin();
-        return;
+        exit(EXIT_SUCCESS);
       default:
         break;
     }
@@ -797,21 +850,25 @@ static void show_trace() {
 
 
     // check every 100ms to see if verification worker finished
-    if (init_complete == 1) {
-      if (peek_worker_status(status) == 0) {
+    if (init_complete == 1)
+    {
+      if (peek_worker_status(status) == 0)
+      {
         show_start_message();
         continue;
       }
     }
 
     // 2 seconds after shwoing start message begin the trace
-    if ((start_message_delay != 0) && (time(NULL) - start_message_delay >= 2)) {
+    if ((start_message_delay != 0) && (time(NULL) - start_message_delay >= 2))
+    {
       start_message_delay = 0;
       start_trace();
     }
 
     // check every 100ms to see if can update trace history
-    if (num_pages_traveled > prev_hops) {
+    if (num_pages_traveled > prev_hops)
+    {
       // go through prev_hops + 1 to hops
       // print them
       // update prev_hops
@@ -819,7 +876,8 @@ static void show_trace() {
     }
 
     // check every 100ms to see if trace worker finished
-    if (trace_complete == 1) {
+    if (trace_complete == 1)
+    {
       peek_worker_status(status);
     }
   }
@@ -829,7 +887,8 @@ static void show_trace() {
 /*
  * Display screen that allows user to adjust some settings of the tracer.
  */
-static void show_settings() {
+static void show_settings()
+{
   // TODO
 }
 

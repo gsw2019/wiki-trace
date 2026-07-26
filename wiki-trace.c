@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <pthread.h>
 
 #include "view.h"
 #include "fetcher.h"
@@ -24,7 +25,7 @@ int main(int argc, char* argv[]) {
   // launch TUI
   init_view();
 
-  // finished with curl
+  // cleanup
   curl_easy_cleanup(curl);
 
   return 0;

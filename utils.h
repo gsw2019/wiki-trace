@@ -26,6 +26,8 @@ typedef enum {
 
 void init_utils();
 
+int quit_request();
+
 void log_error(const char* func, int line, ErrTag tag, const char* err_ptr, void* specifier);
 
 

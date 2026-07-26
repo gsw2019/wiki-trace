@@ -45,7 +45,7 @@ PageData curr_page;
 FILE* error_file;
 
 FILE* file;
-
+int count  = 1;
 
 /*
  * Initialize curl and URL pieces required for our requests.
@@ -113,6 +113,7 @@ static void check_page_exists(char* page_data, char* page_title)
   {
     cJSON_Delete(json_data);
     LOG_ERROR(ERROR_PAGE_EXISTENCE, NULL, page_title);
+    return;
   }
 
   // check if redirects to a different page and change if so
@@ -453,6 +454,7 @@ static void make_links_data_req(char* curr_titles)
   int cont = 1;
   int in_cont = 0;
   char cont_str[32];
+
   while (cont)
   {
     char* url;
@@ -481,12 +483,21 @@ static void make_links_data_req(char* curr_titles)
       strcat(url, url_parts.intro_end);
     }
 
+    // check for quit requests before and after curl to safely exit
+    if (quit_request()) { return; }
+
     // request page content
     curl_easy_setopt(curl, CURLOPT_URL, url);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
     curl_easy_perform(curl);
-    free(url);
+
+    if (quit_request()) { return; }
+
+    /* fprintf(file, "%s\n", curr_titles); */
+    /* fprintf(file, "Response %d:\n %s\n", count, response.data); */
+    /* fprintf(file, "\n\n"); */
+    /* fflush(file); */
 
     // check for parse error
     json_data = cJSON_Parse(response.data);
@@ -511,6 +522,9 @@ static void make_links_data_req(char* curr_titles)
       in_cont = 1;
     }
     else { cont = 0; }
+
+    free(url);
+    count++;
   }
 
   // free json data

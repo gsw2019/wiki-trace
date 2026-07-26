@@ -66,6 +66,7 @@ typedef struct {
   int status;
   char* err_message;
   int quit_request;
+  int stop_request;
   int pause_request;
   int resume_request;
   pthread_mutex_t lock;
@@ -115,6 +116,7 @@ static void read_user_input(int page, WindowProps* text_field);
 static void update_text_field(WindowProps* text_field, int index);
 static void focus_window(WindowProps* window_props, bool focus);
 void update_trace_history();
+static void cleanup_trace_view();
 
 // functions concerened with starting, pausing, or stopping the trace
 static void init_trace_verification();

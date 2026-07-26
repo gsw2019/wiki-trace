@@ -19,10 +19,12 @@
  * @param key: the string to hash
  * @return index for the key
  */
-unsigned int hash(char* key) {
+unsigned int hash(char* key)
+{
   unsigned int h = 0;
 
-  while (*key) {
+  while (*key)
+  {
     h = PRIME * h + (*key);
     key++;
   }
@@ -42,11 +44,13 @@ unsigned int hash(char* key) {
  * @param val: value for node
  * @return 0 if successsful new add, 1 if replacement
  */
-int hash_table_add(HashTable* ht, char* key, double val) {
+int hash_table_add(HashTable* ht, char* key, double val)
+{
   unsigned int index = hash(key);
 
   // non-occupied index
-  if (ht->buckets[index] == NULL) {
+  if (ht->buckets[index] == NULL)
+  {
     ht->buckets[index] = malloc(sizeof(Node));
 
     ht->buckets[index]->key = strdup(key);
@@ -59,7 +63,8 @@ int hash_table_add(HashTable* ht, char* key, double val) {
 
   // occupied index
   Node* curr_node = ht->buckets[index];
-  while (curr_node) {
+  while (curr_node)
+  {
     if (strcmp(curr_node->key, key) == 0) {
       curr_node->value = val;
       return 1;
@@ -88,7 +93,8 @@ int hash_table_add(HashTable* ht, char* key, double val) {
  * @param key: key whos value to find
  * @return node value if entry exists, -1 if entry does not exist
  */
-double hash_table_get(HashTable* ht, char* key) {
+double hash_table_get(HashTable* ht, char* key)
+{
   unsigned int index = hash(key);
   Node* curr_node = ht->buckets[index];
 
@@ -96,11 +102,10 @@ double hash_table_get(HashTable* ht, char* key) {
   if (curr_node == NULL) { return -1.0; }
 
   // walk down list
-  while (curr_node) {
+  while (curr_node)
+  {
     // if found, return value
-    if (strcmp(curr_node->key, key) == 0) {
-      return curr_node->value;
-    }
+    if (strcmp(curr_node->key, key) == 0) { return curr_node->value; }
 
     curr_node = curr_node->next;
   }
@@ -118,15 +123,18 @@ double hash_table_get(HashTable* ht, char* key) {
  * @param val: value for node
  * @return 0 if successsful set, -1 if key does not exist
  */
-int hash_table_set(HashTable* ht, char* key, double new_val) {
+int hash_table_set(HashTable* ht, char* key, double new_val)
+{
   // if entry doesnt exist, get out
   if (hash_table_get(ht, key) == -1) { return -1; }
 
   unsigned int index = hash(key);
 
   Node* curr_node = ht->buckets[index];
-  while(curr_node) {
-    if (strcmp(curr_node->key, key) == 0) {
+  while(curr_node)
+  {
+    if (strcmp(curr_node->key, key) == 0)
+    {
       curr_node->value = new_val;
       return 0;
     }
@@ -143,15 +151,18 @@ int hash_table_set(HashTable* ht, char* key, double new_val) {
  *
  * @param ht: hash table to be printed
  */
-void hash_table_print(HashTable* ht, FILE* file) {
+void hash_table_print(HashTable* ht, FILE* file)
+{
   // go through each bucket
-  for (int i=0; i < NUM_BUCKETS; i++) {
+  for (int i=0; i < NUM_BUCKETS; i++)
+  {
     Node* curr_node = ht->buckets[i];
 
     if (curr_node == NULL) { continue; }
 
     // print a buckets list
-    while (curr_node) {
+    while (curr_node)
+    {
       fprintf(file, "key: %s, value: %lf", curr_node->key, curr_node->value);
       fprintf(file, "%s", " | ");
       curr_node = curr_node->next;
