@@ -13,6 +13,7 @@
 #include <math.h>
 
 #include "tracer.h"
+#include "cJSON.h"
 #include "fetcher.h"
 #include "hash_table.h"
 #include "stmr.h"
@@ -26,6 +27,8 @@ HashTable ht_stopwords;
 FILE* stop_words_file;
 
 char** pages_visited;
+
+char* next_page;
 
 FILE* file;
 
@@ -78,11 +81,7 @@ char* clean_term(char* token)
 HashTable* compute_term_freq(char* string) 
 {
   HashTable* ht = calloc(1, sizeof(HashTable));
-  if (ht == NULL)
-  {
-    LOG_ERROR(ERROR_CALLOC, NULL, NULL);
-    return NULL;
-  }
+  if (ht == NULL) { LOG_ERROR(ERROR_CALLOC, NULL, NULL); }
 
   // make mutable array for tokenization
   char str_arr[strlen(string) + 1];
@@ -130,7 +129,7 @@ HashTable* compute_term_freq(char* string)
   }
 
   // iterate over all hash table entries and log10() their tf
-  for (int i = 0; i < NUM_BUCKETS; i++) 
+  for (int i = 0; i < NUM_BUCKETS; i++)
   {
     if (ht->buckets[i]) 
     {
@@ -205,17 +204,90 @@ void set_dest_page_content(char* page_content)
 
 
 /*
+ * Updates the global shared struct that tracks the pages traveled
+ *
+ * @param page_title: the next page in the trace
+ */
+void update_pages_traveled(char* page_title)
+{
+  pthread_mutex_lock(&trace_data.lock);
+
+  // reallocate
+  char** temp = realloc(trace_data.pages_traveled, trace_data.num_pages_traveled * sizeof(char*));
+  if (temp == NULL) { LOG_ERROR(ERROR_REALLOC, NULL, NULL); }
+  trace_data.pages_traveled = temp;
+
+  // append page title
+  trace_data.pages_traveled[trace_data.num_pages_traveled] = strdup(page_title);
+
+  // inccrement count
+  // also tracks the  next index to append to
+  trace_data.num_pages_traveled++;
+
+  pthread_mutex_unlock(&trace_data.lock);
+}
+
+
+/*
  * Performs scoring on the page links using the TF of their intros and the TF of the
- * destination pages intro. Only keeps track of the top score.
+ * destination pages intro.
  *
  * @param page_data: struct with current pages links' titles and intros
  */
 void score_intros(PageData* page_data)
 {
-  fprintf(file, "in score_intros\n");
-  fprintf(file, "num page links: %d\n", page_data->num_links);
-  fprintf(file, "num links data: %d\n", page_data->num_links_data);
-  fflush(file);
+  /* fprintf(file, "in score_intros\n"); */
+  /* fprintf(file, "num page links: %d\n", page_data->num_links); */
+  /* fprintf(file, "num links data: %d\n", page_data->num_links_data); */
+  /* fflush(file); */
+  /**/
+
+  double top_score = 0;
+  char* top_title;
+
+  // iterate over all intro objects
+  for (int i=0; i < page_data->num_links_data; i++)
+  {
+    double curr_score = 0;
+
+    // walk JSON to get intro text
+    cJSON* curr = page_data->links_data[i];
+    cJSON* curr_intro_obj = cJSON_GetObjectItem(curr, "extract");
+    char* curr_intro = curr_intro_obj->valuestring;
+
+    // get a tf of extract
+    HashTable* curr_tf_ht = compute_term_freq(curr_intro);
+
+    // iterate over curr hash table and sum the tf of tokens shared with destination page
+    for (int j=0; j < NUM_BUCKETS; j++)
+    {
+      if (curr_tf_ht->buckets[j] != NULL)
+      {
+        Node* node = curr_tf_ht->buckets[j];
+        while (node)
+        {
+          // check if in destination page
+          double dest_page_val = hash_table_get(destination_page.content_tf, node->key);
+          if ( dest_page_val != -1) { curr_score += node->value + dest_page_val; }
+          node = node->next;
+        }
+      }
+    }
+
+    if (curr_score > top_score)
+    {
+      top_score = curr_score;
+
+      // get title from JSON object
+      cJSON* curr_title_obj = cJSON_GetObjectItem(curr, "title");
+      top_title = strdup(curr_title_obj->valuestring);
+    }
+  }
+
+  /* fprintf(file, "%s\n", top_title); */
+  /* fflush(file); */
+
+  next_page = strdup(top_title);
 }
 
 
@@ -224,10 +296,7 @@ void score_intros(PageData* page_data)
  *
  * @return a page title
  */
-char* get_next_page()
-{
-  return "temp";
-}
+char* get_next_page() { return next_page; }
 
 
 /*
@@ -244,20 +313,14 @@ void evaluate_page(PageData* page_data)
       pthread_mutex_lock(&trace_data.lock);
       trace_data.trace_complete = 1;
       trace_data.trace_successful = 1;
-      trace_data.num_pages_traveled++;
-      pthread_mutex_unlock(&trace_data.lock);
 
       // add dest page to list of traveled pages
       char** temp = realloc(trace_data.pages_traveled, trace_data.num_pages_traveled * sizeof(char*));
-      if (temp == NULL)
-      {
-        LOG_ERROR(ERROR_REALLOC, NULL, NULL);
-        return;
-      }
+      if (temp == NULL) { LOG_ERROR(ERROR_REALLOC, NULL, NULL); }
 
-      pthread_mutex_lock(&trace_data.lock);
       trace_data.pages_traveled = temp;
-      trace_data.pages_traveled[trace_data.num_pages_traveled - 1] = strdup(destination_page.title);
+      trace_data.pages_traveled[trace_data.num_pages_traveled] = strdup(destination_page.title);
+      trace_data.num_pages_traveled++;
       pthread_mutex_unlock(&trace_data.lock);
 
       return;
@@ -271,7 +334,7 @@ void evaluate_page(PageData* page_data)
  */
 void init_tracer(char* page_title)
 {
-  file = fopen("output.txt", "w");
+  file = fopen("output.txt", "a");
   if (file == NULL) {
     perror("fopen");
     exit(EXIT_FAILURE);

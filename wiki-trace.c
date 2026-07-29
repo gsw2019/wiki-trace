@@ -20,7 +20,7 @@ int main(int argc, char* argv[]) {
   init_utils();
 
   // initialize curl
-  CURL* curl = init_curl();
+  init_curl();
 
   // launch TUI
   init_view();

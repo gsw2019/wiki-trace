@@ -45,25 +45,22 @@ PageData curr_page;
 FILE* error_file;
 
 FILE* file;
-int count  = 1;
 
 /*
  * Initialize curl and URL pieces required for our requests.
  *
  * @return a handle to curl object
  */
-CURL* init_curl()
+void init_curl()
 {
-  /* file = fopen("output.txt", "w"); */
-  /* if (file == NULL) { */
-  /*   perror("fopen"); */
-  /*   exit(EXIT_FAILURE); */
-  /* } */
+  file = fopen("output.txt", "w");
+  if (file == NULL) {
+    perror("fopen");
+    exit(EXIT_FAILURE);
+  }
 
   curl = curl_easy_init();
   curl_easy_setopt(curl, CURLOPT_USERAGENT, "wiki-trace project (wsg2026@outlook.com)");
-
-  return curl;
 }
 
 
@@ -294,7 +291,6 @@ static void get_page_links()
   curr_page.capacity_links = INIT_DATA_ARRAY_SIZE;
   if (curr_page.links_titles == NULL) { LOG_ERROR(ERROR_MALLOC, NULL, NULL); }
 
-  cJSON* json_data;
   char* url_page_title = curl_easy_escape(curl, curr_page.title, 0);
   int cont = 1;
   int in_cont = 0;
@@ -325,6 +321,9 @@ static void get_page_links()
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
     curl_easy_perform(curl);
 
+    /* fprintf(file, "response data: %s\n\n", response.data); */
+    /* fflush(file); */
+
     // check for parse error
     cJSON* json_data = cJSON_Parse(response.data);
     const char *error_ptr = cJSON_GetErrorPtr();
@@ -347,11 +346,12 @@ static void get_page_links()
       cJSON_Delete(json_data);
       in_cont = 1; 
     }
-    else { cont = 0; }
+    else
+    {
+      cont = 0; 
+      cJSON_Delete(json_data);
+    }
   }
-
-  // free json data
-  cJSON_Delete(json_data);
 
   // free heap allocated data after last use
   free(url_page_title);
@@ -395,6 +395,9 @@ static char* get_page_content(char* page_title)
   cJSON* pages_element = cJSON_GetArrayItem(pages, 0);
   cJSON* pages_extract = cJSON_GetObjectItem(pages_element, "extract");
   char* extract = strdup(pages_extract->valuestring);
+
+  /* fprintf(file, "%s\n\n", extract); */
+  /* fflush(file); */
 
   // free json data
   cJSON_Delete(json_data);
@@ -490,11 +493,6 @@ static void make_links_data_req(char* curr_titles)
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
     curl_easy_perform(curl);
  
-    /* fprintf(file, "%s\n", curr_titles); */
-    /* fprintf(file, "Response %d:\n %s\n", count, response.data); */
-    /* fprintf(file, "\n\n"); */
-    /* fflush(file); */
-
     // check for parse error
     json_data = cJSON_Parse(response.data);
     const char *error_ptr = cJSON_GetErrorPtr();
@@ -520,7 +518,6 @@ static void make_links_data_req(char* curr_titles)
     else { cont = 0; }
 
     free(url);
-    count++;
   }
 
   // free json data
@@ -598,12 +595,16 @@ static void get_links_data()
 /*
  * Cleans up the PageData stuct used by the current page. Frees its links and intros fields.
  * Readies it for use on next iteration.
- *
- * @param page_data: struct need to clean
  */
 static void free_page_data()
 {
-  // TODO
+  // free array of link titles
+  for (int i=0; i < curr_page.num_links; i++) { free(curr_page.links_titles[i]); }
+  free(curr_page.links_titles);
+
+  // free array of cJSON objects
+  for (int i=0; i < curr_page.num_links_data; i++) { free(curr_page.links_data[i]); }
+  free(curr_page.links_data);
 }
 
 
@@ -623,11 +624,7 @@ void* run_trace(void* args)
   trace_data.num_pages_traveled++;
   pthread_mutex_unlock(&trace_data.lock);
 
-  if (temp == NULL)
-  {
-    LOG_ERROR(ERROR_MALLOC, NULL, NULL);
-    return NULL;
-  }
+  if (temp == NULL) { LOG_ERROR(ERROR_MALLOC, NULL, NULL); }
 
   int status;
   int trace_complete;
@@ -664,6 +661,7 @@ void* run_trace(void* args)
   if (status != 0) { return NULL; }
 
   // while destination page not found
+  int iter = 1;
   while (trace_complete == 0) {
 
     get_links_data();
@@ -683,11 +681,9 @@ void* run_trace(void* args)
 
     score_intros(&curr_page);
 
-    return NULL;
-
     char* next_page = get_next_page();
 
-    trace_data.num_pages_traveled++;
+    update_pages_traveled(next_page);
 
     free_page_data();
 
@@ -700,7 +696,6 @@ void* run_trace(void* args)
     pthread_mutex_lock(&trace_data.lock);
     trace_complete = trace_data.trace_complete;
     pthread_mutex_unlock(&trace_data.lock);
-
   }
 
   return NULL;

@@ -58,8 +58,8 @@ typedef struct {
 typedef struct {
   char start_page[256];
   char dest_page[256];
-  char** pages_traveled;
-  int num_pages_traveled;
+  char** pages_traveled;    // array of page titles
+  int num_pages_traveled;   // how maany pages traveled + index to add to in array
   int init_complete;
   int trace_complete;
   int trace_successful;

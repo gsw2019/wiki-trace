@@ -373,6 +373,8 @@ static void init_trace_verification()
 /*
  * Continuously checks struct shared with worker to see if its completed. Wrapped in
  * mutex where it is called.
+ *
+ * @return 1 if a bad status, 0 otherwise
  */
 static int peek_worker_status(int status)
 {
@@ -433,6 +435,53 @@ static void start_trace()
 
 
 /*
+ * Updates the text field view when user types in the start page or destination page text field
+ *
+ * @param text_field: the window data needed to display and read text from
+ * @param index: the current index of the cursor and buffer
+ */
+static void update_text_field(WindowProps* text_field, int index)
+{
+  int new_min_col;
+
+  if (index >= TEXT_WIN_WIDTH - 2) { new_min_col = index - TEXT_WIN_WIDTH + 2; }
+  else { new_min_col = 0; }
+
+  wmove(text_field->window, 0, index);
+  prefresh(text_field->window,
+           text_field->min_row, new_min_col,
+           text_field->view_top, text_field->view_left,
+           text_field->view_bot, text_field->view_right);
+}
+
+
+/*
+ * bring a window into focus by changing its border color
+ */
+static void focus_window(WindowProps* window_props, bool focus)
+{
+  // color to draw active window borders
+  init_pair(1, COLOR_CYAN, -1);
+
+  if (focus)
+  {
+    wattron(window_props->window, COLOR_PAIR(1));
+    box(window_props->window, 0, 0);
+    mvwprintw(window_props->window, 0, 2, "%s", window_props->title);
+    wattroff(window_props->window, COLOR_PAIR(1));
+    wrefresh(window_props->window);
+  }
+  else
+  {
+    box(window_props->window, 0, 0);
+    mvwprintw(window_props->window, 0, 2, "%s", window_props->title);
+    wrefresh(window_props->window);
+  }
+}
+
+
+
+/*
  * Read chars entered into the start page text field or the destination page text field.
  *
  * @param page: a flag to know which text field is being written to (1 = spage, 2 = dpage)
@@ -442,8 +491,12 @@ static void read_user_input(int page, WindowProps* text_field)
 {
   keypad(text_field->window, TRUE);
 
-  // unfocus history window if it was focused
+  // unfocus history window if it was focused, but keep text if any
   focus_window(&trace_windows.hist_window, false);
+  prefresh(trace_windows.hist_text_field.window,
+           trace_windows.hist_text_field.min_row, trace_windows.hist_text_field.min_col,
+           trace_windows.hist_text_field.view_top, trace_windows.hist_text_field.view_left,
+           trace_windows.hist_text_field.view_bot, trace_windows.hist_text_field.view_right);
 
   // change border color to show avtive window
   if (page == 1) { focus_window(&trace_windows.spage_window, true); }
@@ -524,52 +577,6 @@ static void read_user_input(int page, WindowProps* text_field)
 
       return;
     }
-  }
-}
-
-
-/*
- * Updates the text field view when user types in the start page or destination page text field
- *
- * @param text_field: the window data needed to display and read text from
- * @param index: the current index of the cursor and buffer
- */
-static void update_text_field(WindowProps* text_field, int index)
-{
-  int new_min_col;
-
-  if (index >= TEXT_WIN_WIDTH - 2) { new_min_col = index - TEXT_WIN_WIDTH + 2; }
-  else { new_min_col = 0; }
-
-  wmove(text_field->window, 0, index);
-  prefresh(text_field->window,
-           text_field->min_row, new_min_col,
-           text_field->view_top, text_field->view_left,
-           text_field->view_bot, text_field->view_right);
-}
-
-
-/*
- * bring a window into focus by changing its border color
- */
-static void focus_window(WindowProps* window_props, bool focus)
-{
-  // color to draw active window borders
-  init_pair(1, COLOR_CYAN, -1);
-
-  if (focus)
-  {
-    wattron(window_props->window, COLOR_PAIR(1));
-    box(window_props->window, 0, 0);
-    mvwprintw(window_props->window, 0, 2, "%s", window_props->title);
-    wattroff(window_props->window, COLOR_PAIR(1));
-    wrefresh(window_props->window);
-  }
-  else
-  {
-    box(window_props->window, 0, 0);
-    mvwprintw(window_props->window, 0, 2, "%s", window_props->title);
-    wrefresh(window_props->window);
   }
 }
 
@@ -873,6 +880,20 @@ static void show_trace()
     if (trace_complete == 1)
     {
       peek_worker_status(status);
+      focus_window(&trace_windows.hist_window, false);
+      prefresh(hist_text_field->window,
+               hist_text_field->min_row, hist_text_field->min_col,
+               hist_text_field->view_top, hist_text_field->view_left,
+               hist_text_field->view_bot, hist_text_field->view_right);
+
+      //
+      // TODO
+      //
+      // Getting some errors when trying to start up another trace after one ends
+      // Need to have a function that handles cleaning up all memory and resets the program
+      //
+      // cleanup();
+
     }
   }
 }

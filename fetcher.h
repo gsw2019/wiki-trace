@@ -54,7 +54,7 @@ extern TraceData trace_data;    // global var used to track trace state across v
 
 
 // init or utility funcs
-CURL* init_curl();
+void init_curl();
 static size_t write_callback(void *ptr, size_t size, size_t nmemb, Response *res);
 
 // verifying pages input by user

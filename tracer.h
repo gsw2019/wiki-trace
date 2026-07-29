@@ -33,12 +33,15 @@ void set_dest_page_content(char* page_content);
 char* clean_term(char* token);
 HashTable* compute_term_freq(char* string);
 
-// func check if trace is done
-void evaluate_page(PageData* page_data);
-
 // func to choose next page
 void score_intros(PageData* page_data);
 char* get_next_page();
+
+// func to update global shared struct
+void update_pages_traveled(char* page_title);
+
+// func check if trace is done
+void evaluate_page(PageData* page_data);
 
 
 #endif
