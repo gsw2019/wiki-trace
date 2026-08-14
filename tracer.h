@@ -8,13 +8,22 @@
 #ifndef TRACER_H
 #define TRACER_H
 
-
-#include "fetcher.h"
+#include "cJSON.h"
 #include "hash_table.h"
 
 
 #define DELIMITERS " \n\t\r"
 
+typedef struct {
+  char* title;
+  char* content;
+  char** links_titles;
+  int links_titles_size;
+  int links_titles_capacity;
+  cJSON** links_data;
+  int links_data_size;
+  int links_data_capacity;
+} PageData;
 
 typedef struct {
   char* title;
@@ -43,5 +52,7 @@ void update_pages_traveled(char* page_title);
 // func check if trace is done
 void evaluate_page(PageData* page_data);
 
+// run the trace
+void* run_trace(void* args);
 
 #endif

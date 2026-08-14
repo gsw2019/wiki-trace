@@ -10,6 +10,7 @@
 
 #include <curl/curl.h>
 
+#include "tracer.h"
 #include "view.h"
 #include "cJSON.h"
 
@@ -39,16 +40,6 @@ typedef struct {
   size_t size;
 } Response;
 
-typedef struct {
-  char* title;
-  char* content;
-  char** links_titles;
-  cJSON** links_data;
-  int num_links;
-  int num_links_data;
-  int capacity_links;
-} PageData;
-
 
 extern TraceData trace_data;    // global var used to track trace state across view.c and fetcher.c
 
@@ -58,20 +49,20 @@ void init_curl();
 static size_t write_callback(void *ptr, size_t size, size_t nmemb, Response *res);
 
 // verifying pages input by user
-void* verify_pages(void* args);
+void verify_pages();
 static void check_page_exists(char* page_data, char* page_title);
 
 // getting pages links
-static void get_page_links();
-static void parse_links(cJSON* json_data);
+void get_page_links(PageData* curr_page);
+static void parse_links(cJSON* json_data, PageData* curr_page);
 
 // getting pages links data
-static void get_links_data();
-static void make_links_data_req(char* curr_titles);
-static void parse_links_data(cJSON* json_data);
+void get_links_data(PageData* curr_page);
+static void make_links_data_req(char* curr_titles, PageData* curr_page);
+static void parse_links_data(cJSON* json_data, PageData* curr_page);
 
 // getting page content
-static char* get_page_content(char* page_title);
+char* get_page_content(char* page_title);
 
 // freeing data
 static void free_page_data();

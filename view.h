@@ -59,14 +59,14 @@ typedef struct {
   char start_page[256];
   char dest_page[256];
   char** pages_traveled;    // array of page titles
-  int num_pages_traveled;   // how maany pages traveled + index to add to in array
-  int init_complete;
+  int pages_traveled_size;
+  int pages_traveled_capacity;
+  int trace_in_progress;
   int trace_complete;
   int trace_successful;
   int status;
   char* err_message;
   int quit_request;
-  int stop_request;
   int pause_request;
   int resume_request;
   pthread_mutex_t lock;
@@ -119,9 +119,10 @@ void update_trace_history();
 static void cleanup_trace_view();
 
 // functions concerened with starting, pausing, or stopping the trace
-static void init_trace_verification();
-static int peek_worker_status(int status);
-static void show_start_message();
+static void display_status(int status);
+static void show_verifying_message();
+static void check_for_user_input();
+static void show_starting_message();
 static void start_trace();
 
 // functions concerned with rendering settings screen

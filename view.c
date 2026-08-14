@@ -12,10 +12,13 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
-#include <time.h>
+#include <unistd.h>
 
 #include "view.h"
+#include "cJSON.h"
 #include "fetcher.h"
+#include "tracer.h"
+#include "utils.h"
 
 
 // menu details
@@ -31,15 +34,13 @@ pthread_t worker;   // worker thread for all none view stuff
 TraceData trace_data = {   // shared data struct for view, fetcher, and tracer
   .start_page = {0},
   .dest_page = {0},
-  .num_pages_traveled = 0,
-  .init_complete = 0,
+  .pages_traveled_size = 0,
+  .pages_traveled_capacity = INIT_DATA_ARRAY_SIZE,
   .trace_complete = 0,
   .trace_successful = 0,
   .status = 0,
   .lock = PTHREAD_MUTEX_INITIALIZER
 };
-
-time_t start_message_delay = 0;
 
 int num_pages_displayed = 0;
 
@@ -351,22 +352,17 @@ static void fill_text_fields()
 
 
 /*
- * Sends of a worker to verify the pages provided exist.
+ * Ensures user has provided inputs in required text fields
  */
-static void init_trace_verification()
+static void check_for_user_input()
 {
-  pthread_join(worker, NULL);
+  pthread_mutex_lock(&trace_data.lock);
+  char* start_page_title = trace_data.start_page;
+  char* dest_page_title = trace_data.dest_page;
+  pthread_mutex_unlock(&trace_data.lock);
 
-  // show immediate feedback
-  WindowProps* history = &trace_windows.hist_text_field;
-  wclear(history->window);
-  mvwprintw(history->window, 1, history->write_col, "%s", "Verifying pages...");
-  prefresh(history->window,
-           history->min_row, history->min_col,
-           history->view_top, history->view_left,
-           history->view_bot, history->view_right);
-
-  pthread_create(&worker, NULL, verify_pages, NULL);
+  // if missing one or both titles, return err value
+  if (strlen(start_page_title) == 0 || strlen(dest_page_title) == 0) { LOG_ERROR(ERROR_USER_INPUT, NULL, NULL); }
 }
 
 
@@ -376,26 +372,61 @@ static void init_trace_verification()
  *
  * @return 1 if a bad status, 0 otherwise
  */
-static int peek_worker_status(int status)
+static int check_status()
 {
-  if (status != 0)
+  pthread_mutex_lock(&trace_data.lock);
+
+  // finished with errors
+  if (trace_data.trace_complete == 1 && trace_data.status != 0)
   {
-    pthread_mutex_lock(&trace_data.lock);
     trace_data.status = 0;
     WindowProps* history = &trace_windows.hist_text_field;
     wclear(history->window);
     mvwprintw(history->window, 1, history->write_col, "%s", trace_data.err_message);
     prefresh(history->window,
-             history->min_row, history->min_col,
-             history->view_top, history->view_left,
-             history->view_bot, history->view_right);
+           history->min_row, history->min_col,
+           history->view_top, history->view_left,
+           history->view_bot, history->view_right);
     pthread_mutex_unlock(&trace_data.lock);
     return 1;
   }
+  // finished with no errors
+  else if (trace_data.trace_complete == 1 && trace_data.status == 0)
+  {
+    focus_window(&trace_windows.hist_window, false);
+    WindowProps* hist_text_field = &trace_windows.hist_text_field;
+    prefresh(hist_text_field->window,
+             hist_text_field->min_row, hist_text_field->min_col,
+             hist_text_field->view_top, hist_text_field->view_left,
+             hist_text_field->view_bot, hist_text_field->view_right);
+    pthread_mutex_unlock(&trace_data.lock);
+    return 0;
 
-  return 0;
+    //
+    // TODO
+    // cleanup for next trace
+    //
+  }
+
+  pthread_mutex_unlock(&trace_data.lock);
+  return 1;;
 }
 
+
+/*
+ * Sends of a worker to verify the pages provided exist.
+ */
+static void show_verifying_message()
+{
+  // show immediate feedback
+  WindowProps* history = &trace_windows.hist_text_field;
+  wclear(history->window);
+  mvwprintw(history->window, 1, history->write_col, "%s", "Verifying pages...");
+  prefresh(history->window,
+           history->min_row, history->min_col,
+           history->view_top, history->view_left,
+           history->view_bot, history->view_right);
+}
 
 /*
  * displays a starting message and starts timer to launch trace
@@ -410,9 +441,6 @@ static void show_start_message()
            history->min_row, history->min_col,
            history->view_top, history->view_left,
            history->view_bot, history->view_right);
-
-  // initialze timer
-  start_message_delay = time(NULL);
 }
 
 
@@ -421,7 +449,28 @@ static void show_start_message()
  */
 static void start_trace()
 {
-  pthread_join(worker, NULL);
+  int status;
+
+  show_verifying_message();
+
+  fprintf(file, "%s\n", "right before check_for_user_input");
+  fflush(file);
+
+  check_for_user_input();
+  if (check_status() != 0) { return; };
+
+  fprintf(file, "%s\n", "right before verify_pages");
+  fflush(file);
+
+  verify_pages();
+  if (check_status() != 0) { return; }
+
+  fprintf(file, "%s\n", "right before show_start_message");
+  fflush(file);
+
+  show_start_message();
+
+  sleep(2);
 
   WindowProps* history = &trace_windows.hist_text_field;
   wclear(history->window);
@@ -429,6 +478,7 @@ static void start_trace()
            history->min_row, history->min_col,
            history->view_top, history->view_left,
            history->view_bot, history->view_right);
+  focus_window(&trace_windows.hist_window, true);
 
   pthread_create(&worker, NULL, run_trace, NULL);
 }
@@ -480,7 +530,6 @@ static void focus_window(WindowProps* window_props, bool focus)
 }
 
 
-
 /*
  * Read chars entered into the start page text field or the destination page text field.
  *
@@ -520,7 +569,10 @@ static void read_user_input(int page, WindowProps* text_field)
 
   curs_set(1);
   wmove(text_field->window, 0, index);
-  prefresh(text_field->window, 0, 0, text_field->view_top, text_field->view_left, text_field->view_bot, text_field->view_right);
+  prefresh(text_field->window,
+           0, 0,
+           text_field->view_top, text_field->view_left,
+           text_field->view_bot, text_field->view_right);
 
   while(1)
   {
@@ -586,30 +638,27 @@ static void read_user_input(int page, WindowProps* text_field)
  */
 void update_trace_history()
 {
+  // where history is written
   WindowProps* history = &trace_windows.hist_text_field;
 
   pthread_mutex_lock(&trace_data.lock);
 
-  for (int i = num_pages_displayed; i < trace_data.num_pages_traveled; i++)
-  {
-    mvwprintw(history->window, history->write_row, history->write_col, "%s", trace_data.pages_traveled[i]);
-    prefresh(history->window,
-           history->min_row, history->min_col,
-           history->view_top, history->view_left,
-           history->view_bot, history->view_right);
-    history->write_row++;
+  // check if any new pages
+  if (num_pages_displayed < trace_data.pages_traveled_size) {
+
+    // display new pages
+    for (int i = num_pages_displayed; i < trace_data.pages_traveled_size; i++)
+    {
+      mvwprintw(history->window, history->write_row, history->write_col, "%s", trace_data.pages_traveled[i]);
+      prefresh(history->window,
+             history->min_row, history->min_col,
+             history->view_top, history->view_left,
+             history->view_bot, history->view_right);
+      history->write_row++;
+    }
   }
 
-  if (trace_data.trace_complete == 1)
-  {
-    focus_window(&trace_windows.hist_window, false);
-    prefresh(history->window,
-           history->min_row, history->min_col,
-           history->view_top, history->view_left,
-           history->view_bot, history->view_right);
-  }
-
-  num_pages_displayed = trace_data.num_pages_traveled;
+  num_pages_displayed = trace_data.pages_traveled_size;
 
   pthread_mutex_unlock(&trace_data.lock);
 }
@@ -788,9 +837,6 @@ static void show_trace()
   keypad(main_window->window, TRUE);    // handle actions via key presses
   wtimeout(main_window->window, 100);   // errors out wgetch after 100 ms, falls to defualt
 
-  int prev_hops = 0;
-  int init_complete, status, num_pages_traveled, trace_complete;
-
   while (1)
   {
     int ch = wgetch(main_window->window);
@@ -800,7 +846,7 @@ static void show_trace()
       case 's':
       case 'S':
         focus_window(&trace_windows.hist_window, true);
-        init_trace_verification();
+        start_trace();
         break;
       case 'p':
       case 'P':
@@ -835,66 +881,11 @@ static void show_trace()
         break;
     }
 
-    // capture and reset trace status vars
-    pthread_mutex_lock(&trace_data.lock);
-    init_complete = trace_data.init_complete;
-    trace_data.init_complete = 0;
-
-    status = trace_data.status;
-    trace_data.status = 0;
-
-    trace_complete = trace_data.trace_complete;
-    trace_data.trace_complete = 0;
-
-    num_pages_traveled = trace_data.num_pages_traveled;
-    pthread_mutex_unlock(&trace_data.lock);
-
-
-    // check every 100ms to see if verification worker finished
-    if (init_complete == 1)
-    {
-      if (peek_worker_status(status) == 0)
-      {
-        show_start_message();
-        continue;
-      }
-    }
-
-    // 2 seconds after shwoing start message begin the trace
-    if ((start_message_delay != 0) && (time(NULL) - start_message_delay >= 2))
-    {
-      start_message_delay = 0;
-      start_trace();
-    }
+    // check every 100ms for an issue or completion
+    check_status();
 
     // check every 100ms to see if can update trace history
-    if (num_pages_traveled > prev_hops)
-    {
-      // go through prev_hops + 1 to hops
-      // print them
-      // update prev_hops
-      update_trace_history();
-    }
-
-    // check every 100ms to see if trace worker finished
-    if (trace_complete == 1)
-    {
-      peek_worker_status(status);
-      focus_window(&trace_windows.hist_window, false);
-      prefresh(hist_text_field->window,
-               hist_text_field->min_row, hist_text_field->min_col,
-               hist_text_field->view_top, hist_text_field->view_left,
-               hist_text_field->view_bot, hist_text_field->view_right);
-
-      //
-      // TODO
-      //
-      // Getting some errors when trying to start up another trace after one ends
-      // Need to have a function that handles cleaning up all memory and resets the program
-      //
-      // cleanup();
-
-    }
+    update_trace_history();
   }
 }
 

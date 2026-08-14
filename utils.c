@@ -59,7 +59,8 @@ void log_error(const char* func, int line, ErrTag tag, const char* error_ptr, vo
       trace_data.err_message = "cJSON parse error. See logs_wiki-trace.txt file.";
       pthread_mutex_unlock(&trace_data.lock);
 
-      // prints further info to error file
+      // prints further info to error file and stderr
+      fprintf(stderr, "%s\n", "cJSON parse error. See logs_wiki-trace.txt file.");
       fprintf(err_file, "\n%s\n", delim);
       fprintf(err_file, "%s\n", "CJSON PARSE ERROR");
       fprintf(err_file, "Error in: %s, line %d\n", func, line);
@@ -67,6 +68,7 @@ void log_error(const char* func, int line, ErrTag tag, const char* error_ptr, vo
       if (specifier != NULL) { fprintf(err_file, "Error specifier: %s\n", (char*) specifier); }
       fprintf(err_file, "%s\n", delim);
       fflush(err_file);
+      fflush(stderr);
       fclose(err_file);
 
       exit(EXIT_FAILURE);
@@ -145,7 +147,8 @@ void log_error(const char* func, int line, ErrTag tag, const char* error_ptr, vo
       trace_data.err_message = "System memory error.";
       pthread_mutex_unlock(&trace_data.lock);
 
-      // print further info to error file
+      // print further info to error file and stderr
+      fprintf(stderr, "%s\n", "System memory error");
       fprintf(err_file, "\n%s\n", delim);
       if (tag == ERROR_MALLOC) { fprintf(err_file, "%s\n", "MALLOC ERROR"); }
       else if (tag == ERROR_REALLOC) { fprintf(err_file, "%s\n", "REALLOC ERROR"); }
@@ -153,6 +156,7 @@ void log_error(const char* func, int line, ErrTag tag, const char* error_ptr, vo
       fprintf(err_file, "Error in: %s, line %d\n", func, line);
       fprintf(err_file, "%s\n", delim);
       fflush(err_file);
+      fflush(stderr);
       fclose(err_file);
 
       exit(EXIT_FAILURE);
