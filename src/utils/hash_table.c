@@ -10,7 +10,7 @@
 #include <string.h>
 #include <stdio.h>
 
-#include "hash_table.h"
+#include "utils/hash_table.h"
 
 
 /*

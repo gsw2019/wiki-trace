@@ -15,10 +15,10 @@
 #include <unistd.h>
 
 #include "view.h"
-#include "cJSON.h"
+#include "utils/cJSON.h"
 #include "fetcher.h"
 #include "tracer.h"
-#include "utils.h"
+#include "logger.h"
 
 
 // menu details
@@ -35,7 +35,7 @@ TraceData trace_data = {   // shared data struct for view, fetcher, and tracer
   .start_page = {0},
   .dest_page = {0},
   .pages_traveled_size = 0,
-  .pages_traveled_capacity = INIT_DATA_ARRAY_SIZE,
+  .pages_traveled_capacity = INIT_ARRAY_SIZE,
   .trace_complete = 0,
   .trace_successful = 0,
   .status = 0,

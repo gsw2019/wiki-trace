@@ -36,7 +36,8 @@
  *     step2 and step4 access the byte before the first letter. So we skip
  *     steps after step1ab unless k > k0. */
 #include <string.h>
-#include "stmr.h"
+
+#include "utils/stmr.h"
 
 /* The main part of the stemming algorithm starts here. b is a buffer
  * holding a word to be stemmed. The letters are in b[k0], b[k0+1] ...

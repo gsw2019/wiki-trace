@@ -8,11 +8,13 @@
 #ifndef TRACER_H
 #define TRACER_H
 
-#include "cJSON.h"
-#include "hash_table.h"
+#include "utils/cJSON.h"
+#include "utils/hash_table.h"
 
 
 #define DELIMITERS " \n\t\r"
+#define STOPWORDS_FILE "EN_stopwords.txt"
+
 
 typedef struct {
   char* title;
@@ -30,6 +32,13 @@ typedef struct {
   char* content;
   HashTable* content_tf;
 } DestPage;
+
+typedef struct {
+  char** pages;
+  int size;
+  int capacity;
+  double score;
+} Path;
 
 
 // initialize tracer
@@ -55,4 +64,4 @@ void evaluate_page(PageData* page_data);
 // run the trace
 void* run_trace(void* args);
 
-#endif
+#endif  // TRACER_H

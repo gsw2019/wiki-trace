@@ -1,6 +1,8 @@
 # Created by https://www.toptal.com/developers/gitignore/api/vim,c,macos
 # Edit at https://www.toptal.com/developers/gitignore?templates=vim,c,macos
 
+
+#########
 ### C ###
 # Prerequisites
 *.d
@@ -55,6 +57,8 @@ Module.symvers
 Mkfile.old
 dkms.conf
 
+
+#############
 ### macOS ###
 # General
 .DS_Store
@@ -84,10 +88,14 @@ Network Trash Folder
 Temporary Items
 .apdisk
 
+
+###################
 ### macOS Patch ###
 # iCloud generated files
 *.icloud
 
+
+###########
 ### Vim ###
 # Swap
 [._]*.s[a-v][a-z]
@@ -108,5 +116,18 @@ Sessionx.vim
 tags
 # Persistent undo
 [._]*.un~
+
+
+#####################
+### build outputs ###
+build/
+wiki-trace
+
+
+########################
+### LSP/dev env vars ###
+.cache/
+compile_commands.json
+
 
 # End of https://www.toptal.com/developers/gitignore/api/vim,c,macos

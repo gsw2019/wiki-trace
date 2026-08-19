@@ -13,8 +13,8 @@
 
 #include "fetcher.h"
 #include "tracer.h"
-#include "cJSON.h"
-#include "utils.h"
+#include "utils/cJSON.h"
+#include "logger.h"
 #include "view.h"
 
 
@@ -63,7 +63,7 @@ void init_curl()
 
 
 /*
- * function used by curl to gather and concate the chunks it returns from the response
+ * Used by curl to gather and concate the chunks it returns from the response.
  *
  * @param ptr:   delivered data
  * @param size:  always 1 (fwrite relic, unused here)
@@ -84,7 +84,9 @@ static size_t write_callback(void *ptr, size_t size, size_t nmemb, Response *res
 
 
 /*
- * Makes request to check page existence.
+ * Parse request response.
+ * Check if has 'missing' field.
+ * Rename stored page name if has 'redirect' field or 'normalized' field.
  * Sets status in trace data struct if issues.
  *
  * @param page_data: string of json data from response
@@ -150,7 +152,9 @@ static void check_page_exists(char* page_data, char* page_title)
 
 
 /*
- * Ensure user entered two pages and the pages exist
+ * Ensure user entered two pages and the pages exist.
+ * Build URLs and make requests for pages.
+ * Send response to check_page_exists()
  */
 void verify_pages()
 {
@@ -201,7 +205,7 @@ void verify_pages()
 
 
 /*
- * Gets the link titles out of the JSON data and stores them in PageData struct
+ * Gets the link titles out of JSON data and stores them in PageData struct
  *
  * @param json_data: request response
  * @param page_data: struct to write links to
@@ -255,7 +259,8 @@ static void parse_links(cJSON* json_data, PageData* curr_page)
 
 
 /*
- * Gets all of the specified page's links
+ * Build URL and make request for all the links on a page.
+ * Send responses to parse_links().
  *
  * @param page_title: title of page to get links of
  * @param curr_page: struct to write page data to
@@ -266,10 +271,10 @@ void get_page_links(PageData* curr_page)
   Response response = { .data = malloc(1), .size = 0 };
   if (response.data == NULL) { LOG_ERROR(ERROR_MALLOC, NULL, NULL); }
 
-  // initialize struct to hold page data
-  curr_page->links_titles = malloc(INIT_DATA_ARRAY_SIZE * sizeof(char*));
+  // initialize struct fields to hold page data
+  curr_page->links_titles = malloc(INIT_ARRAY_SIZE * sizeof(char*));
   curr_page->links_titles_size = 0;
-  curr_page->links_titles_capacity = INIT_DATA_ARRAY_SIZE;
+  curr_page->links_titles_capacity = INIT_ARRAY_SIZE;
   if (curr_page->links_titles == NULL) { LOG_ERROR(ERROR_MALLOC, NULL, NULL); }
 
   char* url_page_title = curl_easy_escape(curl, curr_page->title, 0);
@@ -341,7 +346,7 @@ void get_page_links(PageData* curr_page)
 
 
 /*
- * Gets the pages entire content in plain text.
+ * Build URL and make request for a pages content.
  *
  * @param page_title: title of page to get content of
  * @param page: struct to write page content to
@@ -422,6 +427,7 @@ static void parse_links_data(cJSON* json_data, PageData* curr_page)
 
 /*
  * Make and continue requests for link data
+ * Send responses to parse_links_data()
  *
  * @param page_data: where to store cJSON object with extract
  * @param curr_titles: string of titles
@@ -511,8 +517,9 @@ static void make_links_data_req(char* curr_titles, PageData* curr_page)
 
 
 /*
- * Build string of titles for request URL out of links gathered from a page. Each string can contain
- * 50 titles max. After looping over 50 titles, we make request with helper functions
+ * Build string of titles for request URL.
+ * Each string can contain 50 titles max.
+ * After looping over 50 titles, make request with make_links_data-req()
  *
  * @param page_data: struct containing links to get intros for
  */

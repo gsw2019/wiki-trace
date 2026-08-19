@@ -8,10 +8,13 @@
 #ifndef UTILS_H
 #define UTILS_H
 
+
 #include <stdio.h>
+
 
 #define LOG_ERROR(tag, err_ptr, specifier) log_error(__func__, __LINE__, tag, err_ptr, specifier)
 
+#define INIT_ARRAY_SIZE 2
 
 typedef enum {
   ERROR_MALLOC = 1,
@@ -24,10 +27,10 @@ typedef enum {
 } ErrTag;
 
 
-void init_utils();
+void init_logger();
 
 void log_error(const char* func, int line, ErrTag tag, const char* err_ptr, void* specifier);
 
 
-#endif
+#endif  // UTILS_H
 

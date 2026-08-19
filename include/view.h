@@ -132,5 +132,5 @@ static void show_settings();
 static void show_about();
 
 
-#endif
+#endif  // VIEW_H
 

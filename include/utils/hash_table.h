@@ -40,5 +40,6 @@ int hash_table_set(HashTable* ht, char* key, double val);
 // visualize hash table
 void hash_table_print(HashTable* ht, FILE* file);
 
-#endif
+
+#endif  // HASH_TABLE_H
 

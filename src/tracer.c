@@ -13,11 +13,11 @@
 #include <math.h>
 
 #include "tracer.h"
-#include "cJSON.h"
 #include "fetcher.h"
-#include "hash_table.h"
-#include "stmr.h"
-#include "utils.h"
+#include "logger.h"
+#include "utils/cJSON.h"
+#include "utils/hash_table.h"
+#include "utils/stmr.h"
 
 
 DestPage destination_page;
@@ -26,11 +26,10 @@ PageData curr_page;
 
 HashTable ht_stopwords;
 
-FILE* stop_words_file;
-
 char** pages_visited;
 
 char* next_page;
+
 
 FILE* file;
 
@@ -154,11 +153,10 @@ HashTable* compute_term_freq(char* string)
  */
 void init_stopwords()
 {
-  char* stopwords_file_name = "EN_stopwords.txt";
-  stop_words_file = fopen(stopwords_file_name ,"r");
+  FILE* stop_words_file = fopen(STOPWORDS_FILE,"r");
   if (stop_words_file == NULL)
   {
-    LOG_ERROR(ERROR_FILE, NULL, stopwords_file_name);
+    LOG_ERROR(ERROR_FILE, NULL, STOPWORDS_FILE);
     return;
   }
 
@@ -463,6 +461,6 @@ void init_tracer(char* page_title)
 
   init_stopwords();
 
-  pages_visited = malloc(INIT_DATA_ARRAY_SIZE * sizeof(char*));
+  pages_visited = malloc(INIT_ARRAY_SIZE * sizeof(char*));
 }
 

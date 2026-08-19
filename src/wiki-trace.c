@@ -12,12 +12,12 @@
 
 #include "view.h"
 #include "fetcher.h"
-#include "utils.h"
+#include "logger.h"
 
 
 int main(int argc, char* argv[]) {
   // initialize utilities
-  init_utils();
+  init_logger();
 
   // initialize curl
   init_curl();

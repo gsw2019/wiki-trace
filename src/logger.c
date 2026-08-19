@@ -10,7 +10,7 @@
 #include <string.h>
 #include <pthread.h>
 
-#include "utils.h"
+#include "logger.h"
 #include "fetcher.h"
 #include "view.h"
 
@@ -22,7 +22,7 @@ char delim[50];
 /*
  * Initialize some vars for other utililities functions
  */
-void init_utils()
+void init_logger()
 {
   // error log file
   err_file = fopen("logs_wiki-trace.txt", "w");

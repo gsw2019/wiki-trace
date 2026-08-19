@@ -12,12 +12,10 @@
 
 #include "tracer.h"
 #include "view.h"
-#include "cJSON.h"
+#include "utils/cJSON.h"
 
 
 #define URL_LEN              500
-
-#define INIT_DATA_ARRAY_SIZE 2
 
 
 typedef struct {
@@ -67,8 +65,5 @@ char* get_page_content(char* page_title);
 // freeing data
 static void free_page_data();
 
-// logic of trace
-void* run_trace(void* args);
-
-#endif
+#endif  // FETCHER_H
 
